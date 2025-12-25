@@ -1,0 +1,135 @@
+# ============================================
+# RL100 策略配置 - 优化版
+# ============================================
+_target_: diffusion_policy_3d.policy.rl100.RL100
+
+
+use_variance_clipping: true    # 启用方差裁剪
+sigma_min: 0.01                 
+sigma_max: 0.8   
+# 形状元数据（从task配置引用）
+shape_meta: ${task.shape_meta}
+
+# ============================================
+# 扩散模型配置
+# ============================================
+# 噪声调度器 - epsilon预测模式
+noise_scheduler:
+  _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+  num_train_timesteps: 100        # 训练时的去噪步数
+  beta_start: 0.0001              # 噪声调度起始值
+  beta_end: 0.02                  # 噪声调度结束值
+  beta_schedule: squaredcos_cap_v2  # 平方余弦调度（推荐）
+  variance_type: fixed_small      # 固定小方差
+  clip_sample: True               # 裁剪样本到[-1,1]
+  prediction_type: epsilon        # 预测噪声（RL100核心）
+
+# DP3 基础架构参数
+horizon: 16                       # 动作序列长度
+n_action_steps: 8                 # 执行的动作步数
+n_obs_steps: 2                    # 观察历史步数
+num_inference_steps: 100          # 推理时的去噪步数
+
+obs_as_global_cond: true          # 观察作为全局条件
+diffusion_step_embed_dim: 128     # 时间步嵌入维度
+down_dims: [128, 256, 512]        # U-Net下采样维度
+kernel_size: 5                    # 卷积核大小
+n_groups: 8                       # GroupNorm分组数
+condition_type: film              # 条件化方式（FiLM调制）
+crop_shape: null                  # 图像裁剪（点云不需要）
+
+# ============================================
+# 点云编码器配置
+# ============================================
+use_pc_color: false               # 不使用RGB（仅XYZ）
+pointnet_type: "pointnet"         # PointNet类型
+encoder_output_dim: 256           # 编码器输出维度
+state_mlp_size: [64, 64]          # 低维状态MLP
+state_mlp_activation_fn: 'relu'   # 激活函数
+pointcloud_encoder_cfg: ${task.dataset.pointcloud_encoder_cfg}
+
+# ============================================
+# RL100 核心参数
+# ============================================
+# 折扣因子
+gamma: 0.99                       # 环境级折扣因子（标准RL设置）
+
+# ----------------------------------------
+# VIB 正则化权重
+# ----------------------------------------
+# 变分信息瓶颈（Variational Information Bottleneck）
+# 作用：防止特征过拟合，提高泛化性
+# IL阶段: beta_recon=1.0, beta_kl=0.001（高权重，强正则化）
+# RL阶段: beta_recon=0.1, beta_kl=0.0001（低权重，允许更灵活的表示）
+beta_recon_rl: 0.1                # RL阶段重建损失权重
+beta_kl_rl: 0.0001                # RL阶段KL散度权重
+
+# ----------------------------------------
+# 价值网络配置
+# ----------------------------------------
+value_hidden_dims: [256, 256]     # V网络和Q网络的隐藏层
+
+# ----------------------------------------
+# IQL 参数（隐式Q学习）
+# ----------------------------------------
+omega: 0.7                        # Expectile系数（0.7表示保守估计）
+# omega越大，Q值越保守（避免高估）
+# 推荐范围: 0.6-0.8
+
+is_double_q: true                 # 使用双Q网络（减少过估计）
+
+# ----------------------------------------
+# AM-Q 参数（优势调制Q学习）
+# ----------------------------------------
+# Advantage-Modulated Q-learning
+# 仅使用advantage > threshold的样本训练策略
+amq_threshold: 0.05               # 优势阈值
+# 推荐范围: 0.03-0.1
+# 过小: 几乎所有样本都用，退化为标准RL
+# 过大: 只用极少样本，可能欠拟合
+
+amq_weight: 1.0                   # AM-Q权重（1.0=启用，0.0=禁用）
+
+# ----------------------------------------
+# 双层MDP参数
+# ----------------------------------------
+# Hierarchical MDP: 环境级 + 去噪步级
+use_hierarchical_mdp: true        # 启用双层MDP
+diffusion_step_gamma: 0.99        # 去噪步的折扣因子
+# 为每个去噪步分配独立的Q值
+
+# ----------------------------------------
+# GAE参数（广义优势估计）
+# ----------------------------------------
+# Generalized Advantage Estimation
+# 用于在线RL阶段
+gae_lambda: 0.95                  # GAE的lambda参数
+# lambda=0: 仅用TD误差（高偏差，低方差）
+# lambda=1: 用蒙特卡洛回报（低偏差，高方差）
+# 推荐: 0.9-0.98
+
+# ============================================
+# 超参数说明
+# ============================================
+# 1. VIB权重：
+#    - IL阶段需要强正则化防止过拟合演示数据
+#    - RL阶段需要灵活表示来适应新策略
+#
+# 2. IQL的omega：
+#    - 0.7是经验最佳值（Kostrikov et al., 2021）
+#    - button-press等简单任务可以尝试0.6
+#    - 复杂任务建议0.7-0.75
+#
+# 3. AM-Q的threshold：
+#    - 0.05意味着只用advantage > 0.05的样本
+#    - 如果训练不稳定，降到0.03
+#    - 如果过拟合，提高到0.08
+#
+# 4. GAE的lambda：
+#    - 0.95平衡了偏差和方差
+#    - 如果环境稀疏奖励，尝试0.98
+#    - 如果奖励密集，可以用0.9
+#
+# 5. 双层MDP：
+#    - 理论上更精确，但训练难度略高
+#    - 如果训练不稳定，可以设为false

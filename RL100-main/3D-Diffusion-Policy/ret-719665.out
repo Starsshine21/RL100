@@ -1,0 +1,71 @@
+Job start at 2025-12-23 12:53:06
+Job run at:
+   Static hostname: localhost.localdomain
+Transient hostname: r8a100-d05
+         Icon name: computer-server
+           Chassis: server
+        Machine ID: c8ea36c9ddd14e7eb718a6c819ca1e4a
+           Boot ID: d7a847eab24b4140b9658aaf04ede7c8
+  Operating System: Rocky Linux 8.7 (Green Obsidian)
+       CPE OS Name: cpe:/o:rocky:rocky:8:GA
+            Kernel: Linux 4.18.0-425.10.1.el8_7.x86_64
+      Architecture: x86-64
+Filesystem                                        Size  Used Avail Use% Mounted on
+/dev/mapper/rl-root                               1.5T   35G  1.5T   3% /
+/dev/nvme1n1p1                                    7.0T   50G  7.0T   1% /local
+/dev/nvme0n1p1                                    3.5T   28G  3.5T   1% /tmp
+/dev/nvme0n1p2                                    3.5T   25G  3.5T   1% /local/nfscache
+/dev/sda2                                         2.0G  306M  1.7G  15% /boot
+/dev/mapper/rl-var                                2.0T   35G  2.0T   2% /var
+/dev/sda1                                         599M  5.8M  594M   1% /boot/efi
+ssd.nas00.future.cn:/rocky8_home                   16G   14G  2.2G  87% /home
+ssd.nas00.future.cn:/rocky8_workspace             400G     0  400G   0% /workspace
+ssd.nas00.future.cn:/rocky8_tools                 5.0T   99G  5.0T   2% /tools
+ssd.nas00.future.cn:/centos7_home                  16G  4.1G   12G  26% /centos7/home
+ssd.nas00.future.cn:/centos7_workspace            400G     0  400G   0% /centos7/workspace
+ssd.nas00.future.cn:/centos7_tools                5.0T  235G  4.8T   5% /centos7/tools
+ssd.nas00.future.cn:/eda-tools                    8.0T  5.7T  2.4T  72% /centos7/eda-tools
+hdd.nas00.future.cn:/share_personal               500G     0  500G   0% /share/personal
+zone05.nas01.future.cn:/NAS_HPC_collab_codemodel   40T   37T  3.8T  91% /share/collab/codemodel
+ext-zone00.nas02.future.cn:/nfs_global            379T  378T  607G 100% /nfs_global
+ssd.nas00.future.cn:/common_datasets               75T   64T   12T  85% /datasets
+192.168.12.10@o2ib:192.168.12.11@o2ib:/lustre     1.9P   12T  1.8P   1% /lustre
+beegfs_nodev                                       70T   15T   56T  21% /fast
+Currently Loaded Modulefiles: 1) cluster-tools/v1.0 3) cuda-cudnn/12.1-8.9.3 5) git/2.31.1 2) cmake/3.21.7 4) gcc/9.3.0 6) slurm-tools/v1.0
+/tools/cluster-software/gcc/gcc-9.3.0/bin/gcc
+/nfs_global/S/yangrongzheng/conda_envs/dp3/bin/python
+/nfs_global/S/yangrongzheng/conda_envs/dp3/bin/python3
+############### /home : /home/S/yangrongzheng
+Disk quotas for user yangrongzheng (uid 6215): 
+     Filesystem   space   quota   limit   grace   files   quota   limit   grace
+          /home  14173M  16384M  20480M            156k       0       0        
+
+############### /workspace
+Disk quotas for user yangrongzheng (uid 6215): 
+     Filesystem   space   quota   limit   grace   files   quota   limit   grace
+     /workspace      0K    400G    500G               1       0       0        
+
+############### /nfs_global
+Disk quotas for user yangrongzheng (uid 6215): 
+     Filesystem   space   quota   limit   grace   files   quota   limit   grace
+    /nfs_global    107G   5120G   7168G            364k   5000k  10000k        
+
+############### /lustre
+Disk quotas for usr yangrongzheng (uid 6215):
+     Filesystem    used   quota   limit   grace   files   quota   limit   grace
+        /lustre      0k      8T     10T       -       0  3000000 36000000       -
+uid 6215 is using default block quota setting
+uid 6215 is using default file quota setting
+name, driver_version, power.limit [W]
+NVIDIA A100 80GB PCIe, 570.124.06, 300.00 W
+NVIDIA A100 80GB PCIe, 570.124.06, 300.00 W
+NVIDIA A100 80GB PCIe, 570.124.06, 300.00 W
+NVIDIA A100 80GB PCIe, 570.124.06, 300.00 W
+NVIDIA A100 80GB PCIe, 570.124.06, [Unknown Error]
+NVIDIA A100 80GB PCIe, 570.124.06, 300.00 W
+NVIDIA A100 80GB PCIe, 570.124.06, 300.00 W
+NVIDIA A100 80GB PCIe, 570.124.06, 300.00 W
+Using GPU(s) 0,1,2,3,4,5,6,7
+This job is assigned the following resources by SLURM:
+CPU_IDs=0-127 GRES=gpu:8(IDX:0-7)
+Main program continues to run. Monitoring information will be exported after three hours.
