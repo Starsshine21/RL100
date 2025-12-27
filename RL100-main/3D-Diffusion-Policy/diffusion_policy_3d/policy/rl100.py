@@ -872,7 +872,11 @@ class RL100(DP3):
 
         # 获取调度参数
         alpha_prod_t = scheduler.alphas_cumprod[t]
-        alpha_prod_t_prev = scheduler.alphas_cumprod[t - 1] if t > 0 else scheduler.one
+        # DDIM兼容性：使用torch.tensor(1.0)替代scheduler.one
+        if t > 0:
+            alpha_prod_t_prev = scheduler.alphas_cumprod[t - 1]
+        else:
+            alpha_prod_t_prev = torch.tensor(1.0, device=alpha_prod_t.device, dtype=alpha_prod_t.dtype)
         beta_prod_t = 1 - alpha_prod_t
         beta_prod_t_prev = 1 - alpha_prod_t_prev
 
@@ -925,27 +929,36 @@ class RL100(DP3):
 
     def _get_variance(self, timestep, prev_timestep):
         """
-        计算DDPM方差
+        计算DDPM/DDIM方差
 
         根据variance_type配置计算方差：
         - fixed_small: β_t * (1 - ᾱ_{t-1}) / (1 - ᾱ_t)
         - fixed_large: β_t
         - learned: 从模型学习
+        - None (DDIM): 使用默认计算值
         """
         scheduler = self.noise_scheduler
 
         alpha_prod_t = scheduler.alphas_cumprod[timestep]
-        alpha_prod_t_prev = scheduler.alphas_cumprod[prev_timestep] if prev_timestep >= 0 else scheduler.one
+        # DDIM兼容性：使用torch.tensor(1.0)替代scheduler.one
+        if prev_timestep >= 0:
+            alpha_prod_t_prev = scheduler.alphas_cumprod[prev_timestep]
+        else:
+            alpha_prod_t_prev = torch.tensor(1.0, device=alpha_prod_t.device, dtype=alpha_prod_t.dtype)
         beta_prod_t = 1 - alpha_prod_t
         beta_prod_t_prev = 1 - alpha_prod_t_prev
 
         variance = (beta_prod_t_prev / beta_prod_t) * (1 - alpha_prod_t / alpha_prod_t_prev)
 
-        # 根据variance_type调整
-        if scheduler.config.variance_type == "fixed_small":
+        # 根据variance_type调整（DDIM调度器没有variance_type，使用getattr安全访问）
+        variance_type = getattr(scheduler.config, 'variance_type', None)
+        if variance_type == "fixed_small":
             variance = torch.clamp(variance, min=1e-20)
-        elif scheduler.config.variance_type == "fixed_large":
+        elif variance_type == "fixed_large":
             variance = scheduler.betas[timestep]
+        elif variance_type is None:
+            # DDIM调度器没有variance_type，使用默认计算值并裁剪
+            variance = torch.clamp(variance, min=1e-20)
 
         return variance
 

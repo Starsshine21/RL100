@@ -10,9 +10,9 @@ from diffusion_policy_3d.env.metaworld.metaworld_wrapper import MetaWorldEnv
 
 # ================= 配置区域 =================
 TASK_NAME = 'dial-turn-v2-goal-observable'  # 任务名称
-NUM_EPISODES = 50              # 采集多少条成功轨迹
+NUM_EPISODES = 10              # 采集多少条成功轨迹
 MAX_STEPS = 200                # 每条轨迹最大步数
-SAVE_DIR = './data/metaworld_wrapper_data/dial_turn_demos2' # 保存路径
+SAVE_DIR = './data/metaworld_wrapper_data/dial_turn_demos' # 保存路径
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 NUM_POINTS = 512               # 【修复】点云数量改为512（与DP3一致）
 

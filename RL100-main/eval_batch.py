@@ -48,7 +48,7 @@ class BatchEvaluator:
             checkpoint_path=checkpoint_path,
             device=self.device,
             render=False,
-             max_steps=max_steps or 500
+             max_steps=max_steps
         )
 
         results = evaluator.evaluate(num_episodes=num_episodes, max_steps=max_steps)

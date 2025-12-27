@@ -25,7 +25,7 @@ from diffusion_policy_3d.common.pytorch_util import dict_apply
 class RL100Evaluator:
     """RL100策略评估器（使用MultiStepWrapper）"""
 
-    def __init__(self, checkpoint_path: str, device: str = "cuda:0", render: bool = False, max_steps: int = 500):
+    def __init__(self, checkpoint_path: str, device: str = "cuda:0", render: bool = False, max_steps: int = 200):
         """
         Args:
             checkpoint_path: checkpoint文件路径
@@ -89,12 +89,12 @@ class RL100Evaluator:
         model = hydra.utils.instantiate(self.config.policy)
 
         # 加载权重（优先加载EMA模型）
-        # if 'ema_model_state_dict' in self.checkpoint:
-        #     print("  ✓ 检测到EMA模型，加载EMA权重")
-        #     model.load_state_dict(self.checkpoint['ema_model_state_dict'])
-        # else:
-        #     print("  ℹ 加载主模型权重")
-        model.load_state_dict(self.checkpoint['model_state_dict'])
+        if 'ema_model_state_dict' in self.checkpoint:
+            print("  ✓ 检测到EMA模型，加载EMA权重")
+            model.load_state_dict(self.checkpoint['ema_model_state_dict'])
+        else:
+            print("  ℹ 加载主模型权重")
+            model.load_state_dict(self.checkpoint['model_state_dict'])
 
         model.to(self.device)
 
@@ -120,7 +120,7 @@ class RL100Evaluator:
             评估结果字典
         """
         if max_steps is None:
-            max_steps = 500  # MetaWorld默认
+            max_steps = 200  # MetaWorld默认
 
         print(f"开始评估 ({num_episodes} episodes, 最大{max_steps}步)...\n")
 
@@ -257,7 +257,7 @@ def main():
         checkpoint_path=args.checkpoint,
         device=args.device,
         # render=args.render
-        max_steps=args.max_steps or 500
+        max_steps=args.max_steps
     )
 
     # 运行评估

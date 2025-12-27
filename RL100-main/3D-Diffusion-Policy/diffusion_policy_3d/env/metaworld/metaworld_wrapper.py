@@ -124,7 +124,10 @@ class MetaWorldEnv(gym.Env):
         self.min_bound = [x_min, y_min, z_min]
         self.max_bound = [x_max, y_max, z_max]
 
-        # 使用传入的max_episode_steps参数，而非硬编码200
+        # 使用传入的max_episode_steps参数，确保不为None
+        if max_episode_steps is None:
+            max_episode_steps = 200  # 默认值
+            cprint(f"[MetaWorldEnv] max_episode_steps为None，使用默认值200", "yellow")
         self.episode_length = self._max_episode_steps = max_episode_steps
         self.action_space = self.env.action_space
         self.obs_sensor_dim = self.get_robot_state().shape[0]

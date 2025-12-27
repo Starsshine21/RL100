@@ -23,7 +23,6 @@ from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
 from diffusion_policy_3d.policy.rl100 import RL100
 from diffusion_policy_3d.common.pytorch_util import dict_apply, optimizer_to
-from diffusion_policy_3d.model.common.lr_scheduler import get_scheduler
 from diffusion_policy_3d.common.checkpoint_util import TopKCheckpointManager
 from diffusion_policy_3d.common.replay_buffer import ReplayBuffer
 from diffusion_policy_3d.common.sampler import SequenceSampler
@@ -210,15 +209,7 @@ class TrainRL100Improved:
         self.optimizer = hydra.utils.instantiate(
             cfg.optimizer, params=self.model.parameters())
 
-        # 7. 学习率调度器
-        self.lr_scheduler = None
-        if hasattr(cfg, 'lr_scheduler') and cfg.lr_scheduler is not None:
-            self.lr_scheduler = get_scheduler(
-                cfg.lr_scheduler.name,
-                optimizer=self.optimizer,
-                num_warmup_steps=cfg.lr_scheduler.warmup_steps,
-                num_training_steps=cfg.training.total_steps
-            )
+        # 【DP3论文】不使用学习率调度器，使用固定学习率1e-4
 
         # 8. TopK Checkpoint管理器
         self.ckpt_manager = TopKCheckpointManager(
@@ -246,11 +237,11 @@ class TrainRL100Improved:
             sparse_reward_value=sparse_reward_value
         )
 
-        # 包装为MultiStepWrapper（与评估保持一致：n_obs_steps=2, n_action_steps=8）
+        # 包装为MultiStepWrapper（与评估保持一致：n_obs_steps=2, n_action_steps=3）
         self.env = MultiStepWrapper(
             raw_env,
             n_obs_steps=cfg.policy.n_obs_steps,  # 2
-            n_action_steps=cfg.policy.n_action_steps,  # 8
+            n_action_steps=cfg.policy.n_action_steps,  # 3
             max_episode_steps=200,
             reward_agg_method='sum',
         )
@@ -492,8 +483,6 @@ class TrainRL100Improved:
                         'current_success_rate': success_rate,  # 添加当前成功率字段
                         'config': self.cfg,
                     }
-                    if self.lr_scheduler is not None:
-                        checkpoint['lr_scheduler_state_dict'] = self.lr_scheduler.state_dict()
 
                     torch.save(checkpoint, ckpt_path)
                     print(f"💾 保存TopK模型: {os.path.basename(ckpt_path)}")
@@ -674,10 +663,6 @@ class TrainRL100Improved:
 
                     optimizer.step()
 
-                    # 学习率调度（所有阶段统一调度）
-                    if self.lr_scheduler is not None:
-                        self.lr_scheduler.step()
-
                     # ===== EMA 更新（所有阶段统一更新）=====
                     if self.ema is not None:
                         self.ema.step(self.model)
@@ -689,8 +674,6 @@ class TrainRL100Improved:
                     # 5. 详细日志
                     self.global_step += 1
                     loss_dict['train/grad_norm'] = grad_norm.item()
-                    if self.lr_scheduler is not None:
-                        loss_dict['train/lr'] = self.lr_scheduler.get_last_lr()[0]
 
                     wandb.log(loss_dict, step=self.global_step)
 
@@ -742,9 +725,6 @@ class TrainRL100Improved:
 
                     self.optimizer.step()
 
-                    if self.lr_scheduler is not None:
-                        self.lr_scheduler.step()
-
                     # ===== EMA 更新 =====
                     if self.ema is not None:
                         self.ema.step(self.model)
@@ -756,8 +736,6 @@ class TrainRL100Improved:
                     # 日志
                     self.global_step += 1
                     loss_dict['online_rl/grad_norm'] = grad_norm.item()
-                    if self.lr_scheduler is not None:
-                        loss_dict['online_rl/lr'] = self.lr_scheduler.get_last_lr()[0]
 
                     wandb.log(loss_dict, step=self.global_step)
 
@@ -937,9 +915,6 @@ class TrainRL100Improved:
         if self.ema_model is not None:
             checkpoint['ema_model_state_dict'] = self.ema_model.state_dict()
 
-        if self.lr_scheduler is not None:
-            checkpoint['lr_scheduler_state_dict'] = self.lr_scheduler.state_dict()
-
         torch.save(checkpoint, path)
         print(f"  💾 Checkpoint已保存: {path}")
 
@@ -961,9 +936,6 @@ class TrainRL100Improved:
 
         self.global_step = payload.get('global_step', 0)
         self.best_success_rate = payload.get('best_success_rate', 0.0)
-
-        if self.lr_scheduler is not None and 'lr_scheduler_state_dict' in payload:
-            self.lr_scheduler.load_state_dict(payload['lr_scheduler_state_dict'])
 
         print(f"  ✓ 恢复训练 - Step: {self.global_step}, 最佳成功率: {self.best_success_rate:.2%}")
 

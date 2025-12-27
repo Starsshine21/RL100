@@ -11,18 +11,17 @@ sigma_max: 0.8
 shape_meta: ${task.shape_meta}
 
 # ============================================
-# 扩散模型配置
+# 扩散模型配置 - 【DP3论文标准】
 # ============================================
-# 噪声调度器 - epsilon预测模式
+# 噪声调度器 - Sample预测模式（论文要求）
 noise_scheduler:
-  _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+  _target_: diffusers.schedulers.scheduling_ddim.DDIMScheduler
   num_train_timesteps: 100        # 训练时的去噪步数
   beta_start: 0.0001              # 噪声调度起始值
   beta_end: 0.02                  # 噪声调度结束值
-  beta_schedule: squaredcos_cap_v2  # 平方余弦调度（推荐）
-  variance_type: fixed_small      # 固定小方差
+  beta_schedule: squaredcos_cap_v2  # 平方余弦调度
   clip_sample: True               # 裁剪样本到[-1,1]
-  prediction_type: epsilon        # 预测噪声（RL100核心）
+  prediction_type: epsilon         # 【DP3论文】预测样本（非epsilon）
 
 # DP3 基础架构参数
 horizon: 4                       # 动作序列长度
