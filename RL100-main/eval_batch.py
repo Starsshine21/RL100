@@ -47,7 +47,8 @@ class BatchEvaluator:
         evaluator = RL100Evaluator(
             checkpoint_path=checkpoint_path,
             device=self.device,
-            render=False
+            render=False,
+             max_steps=max_steps or 500
         )
 
         results = evaluator.evaluate(num_episodes=num_episodes, max_steps=max_steps)
@@ -234,7 +235,7 @@ def main():
                         help='对应的阶段名称列表')
 
     # 通用参数
-    parser.add_argument('--num_episodes', type=int, default=50,
+    parser.add_argument('--num_episodes', type=int, default=10,
                         help='每个checkpoint评估的episode数量 (默认: 50)')
     parser.add_argument('--max_steps', type=int, default=None,
                         help='每个episode的最大步数 (默认: 使用环境默认值)')

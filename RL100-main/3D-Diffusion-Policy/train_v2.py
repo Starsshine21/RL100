@@ -170,7 +170,7 @@ class TrainRL100Improved:
         # 全部数据集（用于RL）：原始演示数据 + 所有rollout数据
         self.all_rl_datasets = [self.offline_dataset]
 
-        print(f"[Info] 数据管理策略: IL使用成功数据，RL使用全部数据（无数量限制）")
+        print(f"[Info] 数据管理策略: IL使用成功数据，RL使用全部数据")
 
         # 5. 初始化 RL100 策略
         self.model: RL100 = hydra.utils.instantiate(cfg.policy)
@@ -198,48 +198,15 @@ class TrainRL100Improved:
             from diffusion_policy_3d.model.diffusion.ema_model import EMAModel
             self.ema = EMAModel(
                 model=self.ema_model,
-                power=cfg.training.get('ema_power', 0.75)
+                power=cfg.training.get('ema_power', 0.999)
             )
-            print(f"[Info] EMA 已启用 (power={cfg.training.get('ema_power', 0.75)})")
+            print(f"[Info] EMA 已启用 (power={cfg.training.get('ema_power', 0.999)})")
         else:
             print("[Info] EMA 已禁用")
 
-        # 6. 优化器（分离Q/V和Policy）
-        # Q/V优化器：只更新价值网络
-        qv_params = []
-        qv_params += list(self.model.v_net.parameters())
-        qv_params += list(self.model.q_net1.parameters())
-        qv_params += list(self.model.target_q_net1.parameters())
-        if self.model.is_double_q:
-            qv_params += list(self.model.q_net2.parameters())
-            qv_params += list(self.model.target_q_net2.parameters())
-        if self.model.use_hierarchical_mdp:
-            qv_params += list(self.model.diffusion_q_net1.parameters())
-            qv_params += list(self.model.target_diffusion_q_net1.parameters())
-            if self.model.is_double_q:
-                qv_params += list(self.model.diffusion_q_net2.parameters())
-                qv_params += list(self.model.target_diffusion_q_net2.parameters())
-
-        self.qv_optimizer = hydra.utils.instantiate(
-            cfg.optimizer, params=qv_params)
-
-        # Policy优化器：更新扩散模型和编码器（IL阶段用）
-        policy_params = []
-        policy_params += list(self.model.obs_encoder.parameters())
-        policy_params += list(self.model.model.parameters())
-
-        self.policy_optimizer = hydra.utils.instantiate(
-            cfg.optimizer, params=policy_params)
-
-        # RL优化器：更新扩散模型和Q/V网络（不包括encoder，因为RL阶段encoder会被冻结）
-        rl_params = []
-        rl_params += list(self.model.model.parameters())  # 扩散模型
-        rl_params += qv_params  # Q/V网络
-
-        self.rl_optimizer = hydra.utils.instantiate(
-            cfg.optimizer, params=rl_params)
-
-        # 全局优化器（用于IL阶段和兼容性）
+        # 6. 优化器（统一使用单一优化器，避免学习率调度问题）
+        # 【修复】删除多余的优化器，统一使用self.optimizer
+        # 不同阶段通过冻结/解冻参数来控制更新范围
         self.optimizer = hydra.utils.instantiate(
             cfg.optimizer, params=self.model.parameters())
 
@@ -297,10 +264,8 @@ class TrainRL100Improved:
         self.global_step = 0
         self.best_success_rate = 0.0
 
-        # ===== 新增：性能追踪 =====
+        # ===== 性能追踪 =====
         self.best_checkpoint_path = None
-        self.performance_history = []  # 记录每次评估的性能
-        self.patience_counter = 0  # Early stopping计数器
 
         # 11. 在线RL的Replay Buffer
         self.online_replay_buffer = []
@@ -329,8 +294,6 @@ class TrainRL100Improved:
         print(f"🌱 随机种子: {cfg.training.seed}")
         print("\n✨ 新增改进:")
         print(f"  ✓ 数据质量筛选（成功率阈值: {cfg.training.get('data_quality_threshold', 0.5)}）")
-        print(f"  ✓ Early Stopping（耐心值: {cfg.training.get('early_stop_patience', 3)}轮）")
-        print(f"  ✓ 在线数据比例限制（最大: {cfg.training.get('max_online_data_ratio', 0.5)*100:.0f}%）")
         print(f"  ✓ Phase 3从最佳checkpoint开始")
         print(f"  ✓ 学习率衰减（Phase 3: {cfg.training.get('phase3_lr_factor', 0.1)}x）")
 
@@ -365,6 +328,9 @@ class TrainRL100Improved:
         if resume_path is not None and os.path.exists(resume_path):
             print(f"\n[Info] 从Checkpoint恢复: {resume_path}")
             self.load_checkpoint(resume_path)
+            # 从checkpoint恢复后也需要冻结encoder
+            print("\n[Info] Freezing encoder after resume...")
+            self.freeze_encoder()
         else:
             print("\n" + "="*70)
             print("Phase 1: 模仿学习预训练（IL）")
@@ -380,24 +346,20 @@ class TrainRL100Improved:
             self.save_checkpoint("checkpoint_il_final.ckpt")
             print("✓ Phase 1 完成\n")
 
-        # =========================================
-        # 【新增】IL完成后，冻结encoder
-        # =========================================
-        print("\n[Info] Freezing encoder after IL phase...")
-        self.freeze_encoder()
+            # IL完成后，冻结encoder
+            print("\n[Info] Freezing encoder after IL phase...")
+            self.freeze_encoder()
 
         # =========================================
-        # Phase 2: 离线RL迭代（带Early Stopping）
+        # Phase 2: 离线RL迭代
         # =========================================
         print("="*70)
-        print("Phase 2: 离线强化学习迭代（IQL + AM-Q + Early Stopping）")
+        print("Phase 2: 离线强化学习迭代（IQL + AM-Q）")
         print("="*70)
 
         M = cfg.training.rl_iterations
         eval_freq = cfg.training.get('eval_freq', 2)
-        early_stop_patience = cfg.training.get('early_stop_patience', 3)
         data_quality_threshold = cfg.training.get('data_quality_threshold', 0.5)
-        max_online_data_ratio = cfg.training.get('max_online_data_ratio', 0.5)
 
         for iteration in range(M):
             print(f"\n{'─'*70}")
@@ -506,18 +468,15 @@ class TrainRL100Improved:
 
                 # 保存最佳模型
                 success_rate = eval_results['success_rate']
-                self.performance_history.append(success_rate)
 
-                # ===== 修复：先更新best_success_rate，再保存checkpoint =====
+                # ===== 更新best_success_rate并保存checkpoint =====
                 if success_rate > self.best_success_rate:
                     self.best_success_rate = success_rate
-                    self.patience_counter = 0
                     print(f"  🏆 新最佳成功率: {success_rate:.2%}")
                 else:
-                    self.patience_counter += 1
-                    print(f"  ⚠️  性能未提升（耐心值: {self.patience_counter}/{early_stop_patience}）")
+                    print(f"  📊 当前成功率: {success_rate:.2%}")
 
-                # 保存TopK checkpoint（此时best_success_rate已经是最新值）
+                # 保存TopK checkpoint
                 ckpt_path = self.ckpt_manager.get_ckpt_path({
                     'eval_success_rate': success_rate,
                     'epoch': iteration + 1
@@ -542,12 +501,6 @@ class TrainRL100Improved:
                     # 如果是新最佳成功率，记录checkpoint路径
                     if success_rate == self.best_success_rate:
                         self.best_checkpoint_path = ckpt_path
-
-                # ===== 改进：Early Stopping =====
-                if self.patience_counter >= early_stop_patience:
-                    print(f"\n  🛑 连续{early_stop_patience}轮评估无提升，触发Early Stopping")
-                    print(f"  最佳成功率: {self.best_success_rate:.2%} (迭代{iteration+1-early_stop_patience*eval_freq})")
-                    break
 
             # 保存当前迭代checkpoint
             self.save_checkpoint(f"checkpoint_iter_{iteration+1}.ckpt")
@@ -650,7 +603,6 @@ class TrainRL100Improved:
             print(f"✓ Phase 3: 在线RL - 最终成功率 {final_eval['success_rate']:.2%}")
         print(f"\n总训练步数: {self.global_step:,}")
         print(f"最佳Checkpoint: {self.best_checkpoint_path}")
-        print(f"性能历史: {[f'{x:.2%}' for x in self.performance_history]}")
         print("="*70)
 
     def get_dataloader(self, mode='rl'):
@@ -679,20 +631,21 @@ class TrainRL100Improved:
 
     def train_loop(self, epochs, mode, desc):
         """通用训练循环（IL + IQL + 离线RL）"""
-        # 根据模式选择对应的数据集和优化器
+        # 【修复】统一使用self.optimizer，避免学习率调度器不匹配问题
+        # 根据模式选择对应的数据集
         if mode == 'il':
             dataloader = self.get_dataloader(mode='il')
-            optimizer = self.optimizer
         elif mode == 'iql':
             dataloader = self.get_dataloader(mode='rl')
-            optimizer = self.qv_optimizer
         elif mode == 'offline_rl':
             dataloader = self.get_dataloader(mode='rl')
-            optimizer = self.rl_optimizer
         else:
             raise ValueError(f"Unknown mode: {mode}")
 
-        target_update_freq = self.cfg.training.get('target_update_freq', 100)
+        # 统一使用self.optimizer
+        optimizer = self.optimizer
+
+        target_update_freq = self.cfg.training.get('target_update_freq', 30)
 
         for epoch in range(epochs):
             with tqdm.tqdm(dataloader, desc=f"{desc} Epoch {epoch+1}", leave=False) as tepoch:
@@ -716,18 +669,17 @@ class TrainRL100Improved:
                     # 梯度裁剪
                     grad_norm = torch.nn.utils.clip_grad_norm_(
                         self.model.parameters(),
-                        self.cfg.training.get('grad_clip_norm', 5.0)
+                        self.cfg.training.get('grad_clip_norm', 10.0)
                     )
 
                     optimizer.step()
 
-                    # 学习率调度
-                    if self.lr_scheduler is not None and mode != 'iql':
-                        # IQL阶段不更新学习率调度器
+                    # 学习率调度（所有阶段统一调度）
+                    if self.lr_scheduler is not None:
                         self.lr_scheduler.step()
 
-                    # ===== EMA 更新（只在非IQL模式下更新）=====
-                    if self.ema is not None and mode != 'iql':
+                    # ===== EMA 更新（所有阶段统一更新）=====
+                    if self.ema is not None:
                         self.ema.step(self.model)
 
                     # 4. 优化的Target Q网络更新
@@ -770,7 +722,7 @@ class TrainRL100Improved:
 
     def train_loop_online(self, dataloader, epochs, desc):
         """在线RL训练循环（使用GAE + Q/V网络更新）"""
-        target_update_freq = self.cfg.training.get('target_update_freq', 200)
+        target_update_freq = self.cfg.training.get('target_update_freq', 30)
 
         for epoch in range(epochs):
             with tqdm.tqdm(dataloader, desc=f"{desc} (GAE)", leave=False) as tepoch:
@@ -785,7 +737,7 @@ class TrainRL100Improved:
 
                     grad_norm = torch.nn.utils.clip_grad_norm_(
                         self.model.parameters(),
-                        self.cfg.training.get('grad_clip_norm', 5.0)
+                        self.cfg.training.get('grad_clip_norm', 10.0)
                     )
 
                     self.optimizer.step()
@@ -835,7 +787,7 @@ class TrainRL100Improved:
         policy = self.ema_model if self.ema_model is not None else self.model
         policy.eval()
 
-        n_action_steps = self.cfg.policy.n_action_steps  # 8
+        n_action_steps = self.cfg.policy.n_action_steps  # 3 (执行3步)
         episode_rewards = []
         episode_lengths = []
         episode_successes = []
@@ -856,14 +808,14 @@ class TrainRL100Improved:
                     input_obs['point_cloud'] = torch.from_numpy(obs_dict['point_cloud']).unsqueeze(0).to(self.device).float()
                     input_obs['agent_pos'] = torch.from_numpy(obs_dict['agent_pos']).unsqueeze(0).to(self.device).float()
 
-                    # 2. 策略预测（使用 EMA 模型，预测16步）
+                    # 2. 策略预测（使用 EMA 模型，预测horizon=4步）
                     result = policy.predict_action(input_obs)
-                    action_full = result['action'].squeeze(0).cpu().numpy()  # (16, action_dim)
+                    action_full = result['action'].squeeze(0).cpu().numpy()  # (horizon=4, action_dim)
 
-                    # 3. 只取前n_action_steps步执行（8步）
-                    action_to_execute = action_full[:n_action_steps]  # (8, action_dim)
+                    # 3. 只取前n_action_steps步执行（3步）
+                    action_to_execute = action_full[:n_action_steps]  # (3, action_dim)
 
-                    # 4. 环境执行（MultiStepWrapper会执行这8步）
+                    # 4. 环境执行（MultiStepWrapper会执行这3步）
                     next_obs_dict, reward, done, info = self.env.step(action_to_execute)
                     episode_reward += reward
 
@@ -877,11 +829,11 @@ class TrainRL100Improved:
                         current_success = info['success']
 
                     # 6. 组装样本（注意：这里存储的是单步的数据，用于后续训练）
-                    # 由于MultiStepWrapper执行了8步，我们简化为存储第一步的obs和完整的action序列
+                    # 由于MultiStepWrapper执行了3步，我们简化为存储第一步的obs和完整的action序列
                     sample = {
                         'obs': dict_apply(obs_dict, lambda x: torch.from_numpy(x.copy()).float()),
                         'action': torch.from_numpy(action_to_execute[0]).float(),  # 存储执行的第一步
-                        'reward': torch.tensor(reward).float(),  # MultiStepWrapper已经聚合了8步的奖励
+                        'reward': torch.tensor(reward).float(),  # MultiStepWrapper已经聚合了3步的奖励
                         'next_obs': dict_apply(next_obs_dict, lambda x: torch.from_numpy(x.copy()).float()),
                         'done': torch.tensor(float(done)).float()
                     }
@@ -889,7 +841,7 @@ class TrainRL100Improved:
 
                     # 7. 更新状态
                     obs_dict = next_obs_dict
-                    steps += n_action_steps  # 执行了8步
+                    steps += n_action_steps  # 执行了3步
 
                 # 记录episode统计
                 episode_rewards.append(episode_reward)

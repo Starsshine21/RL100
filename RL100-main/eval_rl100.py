@@ -25,7 +25,7 @@ from diffusion_policy_3d.common.pytorch_util import dict_apply
 class RL100Evaluator:
     """RL100策略评估器（使用MultiStepWrapper）"""
 
-    def __init__(self, checkpoint_path: str, device: str = "cuda:0", render: bool = False):
+    def __init__(self, checkpoint_path: str, device: str = "cuda:0", render: bool = False, max_steps: int = 500):
         """
         Args:
             checkpoint_path: checkpoint文件路径
@@ -48,26 +48,24 @@ class RL100Evaluator:
         # 获取配置参数
         num_points = self.config.task.dataset.pointcloud_encoder_cfg.get('in_channels_points', 1024)
         self.n_obs_steps = self.config.policy.n_obs_steps
-        self.horizon = self.config.policy.horizon  # 模型预测的步数（例如16）
-
-        # ===== 修改：预测16步，执行8步 =====
-        self.n_action_predict = self.horizon  # 预测16步
-        self.n_action_execute = 8             # 执行8步
+        self.horizon = self.config.policy.horizon  
+        self.n_action_predict = self.horizon 
+        self.n_action_execute = self.config.policy.n_action_steps      
 
         print(f"初始化环境（预测{self.n_action_predict}步，执行{self.n_action_execute}步）...")
         raw_env = MetaWorldEnv(
             task_name=self.config.task.env_name,
             device=str(self.device),
             num_points=num_points,
+            max_episode_steps=max_steps,  # 传入max_steps参数
             #render=render
         )
 
-        # ===== 关键修改：MultiStepWrapper配置为执行8步 =====
         self.env = MultiStepWrapper(
             raw_env,
             n_obs_steps=self.n_obs_steps,
-            n_action_steps=self.n_action_execute,  # 执行8步
-            max_episode_steps=200,
+            n_action_steps=self.n_action_execute,
+            max_episode_steps=max_steps,
             reward_agg_method='sum',
         )
         print(f"  ✓ 环境已包装为MultiStepWrapper")
@@ -122,7 +120,7 @@ class RL100Evaluator:
             评估结果字典
         """
         if max_steps is None:
-            max_steps = 200  # MetaWorld默认
+            max_steps = 500  # MetaWorld默认
 
         print(f"开始评估 ({num_episodes} episodes, 最大{max_steps}步)...\n")
 
@@ -259,6 +257,7 @@ def main():
         checkpoint_path=args.checkpoint,
         device=args.device,
         # render=args.render
+        max_steps=args.max_steps or 500
     )
 
     # 运行评估

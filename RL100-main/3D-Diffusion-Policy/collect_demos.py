@@ -12,7 +12,7 @@ NUM_EPISODES = 5               # 采集多少条轨迹（跑通为主，设小�
 MAX_STEPS = 200                # 每条轨迹最大步数
 SAVE_DIR = './data/metaworld2' # 保存路径
 IMG_SIZE = 128                 # 摄像头分辨率
-NUM_POINTS = 1024              # 每个点云采样的点数
+NUM_POINTS = 512               # 【修复】改为512（与DP3一致）
 # ===========================================
 
 def get_camera_matrix(width, height, fov):

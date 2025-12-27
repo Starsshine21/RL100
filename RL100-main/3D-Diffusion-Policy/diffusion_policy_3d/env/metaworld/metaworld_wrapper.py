@@ -66,6 +66,7 @@ class MetaWorldEnv(gym.Env):
                  num_points=1024,
                  use_sparse_reward=False,  # 新增：是否使用稀疏奖励
                  sparse_reward_value=1.0,  # 新增：稀疏奖励的值
+                 max_episode_steps=200,    # 新增：最大episode步数
                  ):
         super(MetaWorldEnv, self).__init__()
 
@@ -122,8 +123,9 @@ class MetaWorldEnv(gym.Env):
             x_min, y_min, z_min, x_max, y_max, z_max = TASK_BOUDNS['default']
         self.min_bound = [x_min, y_min, z_min]
         self.max_bound = [x_max, y_max, z_max]
-        
-        self.episode_length = self._max_episode_steps = 200
+
+        # 使用传入的max_episode_steps参数，而非硬编码200
+        self.episode_length = self._max_episode_steps = max_episode_steps
         self.action_space = self.env.action_space
         self.obs_sensor_dim = self.get_robot_state().shape[0]
 

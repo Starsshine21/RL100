@@ -25,10 +25,10 @@ noise_scheduler:
   prediction_type: epsilon        # 预测噪声（RL100核心）
 
 # DP3 基础架构参数
-horizon: 16                       # 动作序列长度
-n_action_steps: 8                 # 执行的动作步数
+horizon: 4                       # 动作序列长度
+n_action_steps: 3                 # 执行的动作步数
 n_obs_steps: 2                    # 观察历史步数
-num_inference_steps: 100          # 推理时的去噪步数
+num_inference_steps: 10          # 推理时的去噪步数
 
 obs_as_global_cond: true          # 观察作为全局条件
 diffusion_step_embed_dim: 128     # 时间步嵌入维度
@@ -43,7 +43,7 @@ crop_shape: null                  # 图像裁剪（点云不需要）
 # ============================================
 use_pc_color: false               # 不使用RGB（仅XYZ）
 pointnet_type: "pointnet"         # PointNet类型
-encoder_output_dim: 256           # 编码器输出维度
+encoder_output_dim: 64           # 编码器输出维度
 state_mlp_size: [64, 64]          # 低维状态MLP
 state_mlp_activation_fn: 'relu'   # 激活函数
 pointcloud_encoder_cfg: ${task.dataset.pointcloud_encoder_cfg}

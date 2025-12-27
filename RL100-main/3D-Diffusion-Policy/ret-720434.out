@@ -69,3 +69,5 @@ Using GPU(s) 0,1,2,3,4,5,6,7
 This job is assigned the following resources by SLURM:
 CPU_IDs=0-111 GRES=gpu:8(IDX:0-7)
 Main program continues to run. Monitoring information will be exported after three hours.
+Extracting GPU stats logs using atop has been completed on r8l40-a04.
+Logs are being saved to: /nfs_global/S/yangrongzheng/RL100-main/3D-Diffusion-Policy/atop-720434-r8l40-a04-gpustat.log

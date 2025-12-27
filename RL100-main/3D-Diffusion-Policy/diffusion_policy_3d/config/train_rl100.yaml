@@ -11,49 +11,38 @@ training:
   device: cuda:0
 
   # ----------------------------------------
-  # 奖励设置（新增）
+  # 奖励设置
   # ----------------------------------------
-  # 稀疏奖励模式：只在成功时给予奖励，其他时候为0
-  # 适用于想要更难的探索挑战，或者避免距离奖励的干扰
-  use_sparse_reward: true      # 是否使用稀疏奖励（默认false使用密集奖励）
-  sparse_reward_value: 1.0      # 稀疏奖励的值（成功时给予的奖励）
+  use_sparse_reward: true      # 是否使用稀疏奖励
+  sparse_reward_value: 1.0      # 稀疏奖励的值
 
   # ----------------------------------------
-  # Phase 1: IL预训练
+  # Phase 1: IL预训练【DP3标准】
   # ----------------------------------------
-  il_epochs: 70  # IL预训练轮数
+  il_epochs: 1000  # 【DP3标准】MetaWorld训练1000个epoch（论文IV.B）
 
   # ----------------------------------------
-  # Phase 2: 离线RL迭代（带Early Stopping）
+  # Phase 2: 离线RL迭代
   # ----------------------------------------
   rl_iterations: 10             # 最多10轮迭代
   rl_epochs_per_iter: 50        # 每轮迭代的训练epochs
   rollout_episodes: 15          # 每轮rollout的episode数
-  iql_epochs_per_iter: 10    # IQL预训练的epoch数（可选，默认10）
-  # ===== v3优化：减少IL微调，防止catastrophic forgetting =====
+  iql_epochs_per_iter: 10       # IQL预训练的epoch数
   il_finetune_enabled: true     # 启用IL微调
-  il_finetune_epochs: 5         # IL自我纠正的epochs（从20减少到5）
+  il_finetune_epochs: 5         # IL自我纠正的epochs
 
-  # ===== v3新增：数据质量筛选 =====
-  data_quality_threshold: 0.3   # rollout成功率阈值（低于此值的数据将被丢弃）
-  max_online_data_ratio: 0.5    # 在线数据占总数据的最大比例（防止在线数据淹没离线数据）
-
-  # ===== v3新增：Early Stopping =====
-  early_stop_patience: 3        # 连续N轮评估无提升则提前停止Phase 2
+  # 数据质量筛选
+  data_quality_threshold: 0.3   # rollout成功率阈值
 
   # ----------------------------------------
-  # Phase 3: 在线RL（从最佳checkpoint开始）
+  # Phase 3: 在线RL
   # ----------------------------------------
   online_rl_enabled: true
   online_rl_epochs: 30          # 在线RL的训练epochs
   online_rollout_episodes: 30   # 每个epoch的rollout episodes
   online_replay_size: 5000      # 在线replay buffer大小
-
-  # ===== v3新增：Phase 3学习率调整 =====
-  phase3_lr_factor: 0.3         # Phase 3的学习率衰减因子（原学习率 × 0.3，更温和）
-
-  # ===== v3改进：在线数据集数量限制 =====
-  max_online_datasets: 5        # 最多保留5个在线数据集（替代比例限制）
+  phase3_lr_factor: 0.1         # 【修复】Phase 3的学习率衰减因子（0.3→0.1，更保守）
+  max_online_datasets: 5        # 最多保留5个在线数据集
 
   # ----------------------------------------
   # 评估与Checkpoint
@@ -64,14 +53,24 @@ training:
   # ----------------------------------------
   # 优化细节
   # ----------------------------------------
-  target_update_freq: 200       # Target Q网络更新频率（步数）
-  grad_clip_norm: 3.0           # 梯度裁剪阈值
-  max_datasets: 12              # 最多保留的数据集数量（防止OOM）
+  target_update_freq: 30            # 【修复】Target Q网络更新频率（200→30，适配新数据规模）
+  grad_clip_norm: 10.0              # 【修复】梯度裁剪阈值（3.0→10.0，放宽限制）
 
   # ----------------------------------------
-  # 学习率调度
+  # EMA配置
   # ----------------------------------------
-  total_steps: 200000           # 预估总训练步数
+  use_ema: true                     # 启用EMA
+  ema_power: 0.999                  # 【修复】EMA衰减系数（0.75→0.999，标准设置）
+
+  # ----------------------------------------
+  # 学习率调度【根据实际数据量调整】
+  # ----------------------------------------
+  # 计算依据（10条演示数据，每条约200步，共2000步，batch_size=128，每epoch约16 iters）：
+  # IL阶段：1000 epochs × 16 iters/epoch = 16,000步
+  # 离线RL阶段：10轮 × (10 IQL epochs + 50 RL epochs) × 16 iters = 9,600步
+  # 在线RL阶段：30 epochs × 更多iters（replay buffer增长）≈ 5,000步
+  # 总计：约 30,600步，设置为35,000以保留余量
+  total_steps: 35000           # 总训练步数（根据10条演示数据量计算，包含余量）
 
   # ----------------------------------------
   # 可选：从checkpoint恢复
@@ -89,17 +88,17 @@ optimizer:
   eps: 1.0e-8
 
 # ============================================
-# 学习率调度器
+# 学习率调度器【根据实际数据量调整】
 # ============================================
 lr_scheduler:
   name: cosine
-  warmup_steps: 2000      # Warmup步数
+  warmup_steps: 500      # Warmup步数（约占总步数的5%，35000 × 0.05 = 1750）
 
 # ============================================
-# 数据加载器
+# 数据加载器【DP3标准】
 # ============================================
 dataloader:
-  batch_size: 64
+  batch_size: 128  # 【DP3标准】批次大小128（论文III.C）
   num_workers: 4
 
 # ============================================
@@ -116,16 +115,14 @@ logging:
 # ============================================
 # 核心改进：
 # 1. ✅ 数据质量筛选：只保留成功率>30%的rollout数据
-# 2. ✅ Early Stopping：连续3轮评估无提升时提前停止Phase 2
-# 3. ✅ 在线数据比例限制：在线数据最多占总数据的50%
-# 4. ✅ Phase 3从最佳checkpoint开始：避免从性能下降的模型继续训练
-# 5. ✅ Phase 3学习率衰减：降低学习率到原来的0.1倍，提高稳定性
-# 6. ✅ 更详细的性能追踪：记录性能历史，便于分析
+# 2. ✅ Phase 3从最佳checkpoint开始：避免从性能下降的模型继续训练
+# 3. ✅ Phase 3学习率衰减：降低学习率到原来的0.1倍，提高稳定性
+# 4. ✅ 数据管理：IL使用成功数据，RL使用全部数据
 #
 # 预期改进效果：
 # - 减少低质量数据污染训练集
 # - 避免灾难性遗忘和性能退化
-# - Phase 3从80%起点继续，而不是从25%起点
+# - Phase 3从最佳起点继续，而不是从性能下降的模型开始
 # - 更稳定的训练过程
 #
 # 推荐使用场景：

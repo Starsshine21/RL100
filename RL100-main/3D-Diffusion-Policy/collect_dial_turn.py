@@ -10,10 +10,11 @@ from diffusion_policy_3d.env.metaworld.metaworld_wrapper import MetaWorldEnv
 
 # ================= 配置区域 =================
 TASK_NAME = 'dial-turn-v2-goal-observable'  # 任务名称
-NUM_EPISODES = 100              # 采集多少条轨迹
+NUM_EPISODES = 50              # 采集多少条成功轨迹
 MAX_STEPS = 200                # 每条轨迹最大步数
-SAVE_DIR = './data/metaworld_wrapper_data/dial_turn_demos' # 保存路径
+SAVE_DIR = './data/metaworld_wrapper_data/dial_turn_demos2' # 保存路径
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+NUM_POINTS = 512               # 【修复】点云数量改为512（与DP3一致）
 
 # 专家策略映射表 (根据任务名取策略)
 POLICY_MAP = {
@@ -26,7 +27,7 @@ def collect_data():
     # 1. 初始化环境 (使用 Wrapper!)
     print(f"正在初始化 MetaWorldEnv (Task: {TASK_NAME})...")
     # 注意：这里直接使用 Wrapper，保证采集的数据格式与训练/推理完全一致
-    env = MetaWorldEnv(task_name=TASK_NAME, device=DEVICE, num_points=1024)
+    env = MetaWorldEnv(task_name=TASK_NAME, device=DEVICE, num_points=NUM_POINTS)
 
     # 2. 获取专家策略
     if TASK_NAME not in POLICY_MAP:
@@ -51,13 +52,31 @@ def collect_data():
     episode_ends = []
     total_steps = 0
 
+    # 统计信息
+    total_attempts = 0  # 总尝试次数
+    successful_episodes = 0  # 成功的episode数
+
     # 4. 开始采集循环
-    for episode_idx in range(NUM_EPISODES):
-        print(f"采集轨迹: {episode_idx+1}/{NUM_EPISODES}")
+    # 使用while循环，直到采集到足够的成功episode
+    while successful_episodes < NUM_EPISODES:
+        total_attempts += 1
+        print(f"\n采集轨迹: 第{total_attempts}次尝试 (已成功: {successful_episodes}/{NUM_EPISODES})")
 
         # 重置环境，拿到第一帧观测
         # Wrapper 的 reset 返回的是一个字典
         obs_dict = env.reset()
+
+        # Episode级别的临时buffer（用于质量检查后再决定是否保存）
+        episode_buffer = {
+            'state': [],
+            'full_state': [],
+            'action': [],
+            'point_cloud': [],
+            'reward': [],
+            'done': []
+        }
+        ep_success_times = 0  # 记录episode中成功的次数
+        ep_total_reward = 0   # 记录episode总奖励
 
         for step in range(MAX_STEPS):
             # === A. 获取动作 ===
@@ -66,39 +85,63 @@ def collect_data():
             raw_state = obs_dict['full_state']
             action = policy.get_action(raw_state)
 
-            # 添加少量噪声，增加数据多样性 (对抗过拟合)
-            action = np.random.normal(action, 0.05)
+            # 【修复】移除噪声：专家策略不需要添加噪声
+            # 原代码: action = np.random.normal(action, 0.05)
+            # 保持专家动作的原始质量，只做边界裁剪
             action = np.clip(action, -1.0, 1.0)
 
             # === B. 环境执行 ===
             # 这里的 next_obs_dict 里的 point_cloud 已经是处理好的了！
             next_obs_dict, reward, done, info = env.step(action)
 
-            # === C. 存入 Buffer ===
-            # 存当前帧的数据
-            buffer['state'].append(obs_dict['agent_pos'])     # 9维
-            buffer['full_state'].append(obs_dict['full_state']) # 39维
-            buffer['point_cloud'].append(obs_dict['point_cloud'])
-            buffer['action'].append(action)
-            buffer['reward'].append(reward)
-            buffer['done'].append(float(done)) # 转为 float
+            # === C. 存入 Episode Buffer（临时，用于质量检查）===
+            # 存当前帧的数据到episode buffer
+            episode_buffer['state'].append(obs_dict['agent_pos'])     # 9维
+            episode_buffer['full_state'].append(obs_dict['full_state']) # 39维
+            episode_buffer['point_cloud'].append(obs_dict['point_cloud'])
+            episode_buffer['action'].append(action)
+            episode_buffer['reward'].append(reward)
+            episode_buffer['done'].append(float(done)) # 转为 float
+
+            # 累计统计
+            ep_total_reward += reward
+            if info.get('success', False):
+                ep_success_times += 1
 
             # 更新 Obs
             obs_dict = next_obs_dict
-            total_steps += 1
 
             # 如果成功了(info['success']) 或者 超时了
             # 注意：MetaWorld 的 done 信号有时候不准，通常以 success 或 max_steps 为准
-            # 这里为了简单，跑满 MAX_STEPS 或者遇到明确 done
             if done:
-                print("成功")
                 break
             elif step == MAX_STEPS - 1:
-                print("超过步数限制")
                 break
 
-        # 记录每条轨迹的结束点
-        episode_ends.append(total_steps)
+        # === D. 质量检查（关键修复）===
+        # 遵循DP3的严格筛选标准：
+        # 1. episode必须在最后成功 (info['success'] == True)
+        # 2. 在episode过程中至少连续成功5次 (ep_success_times >= 5)
+        ep_final_success = info.get('success', False)
+
+        if ep_final_success and ep_success_times >= 5:
+            # ✅ 质量合格，保存到全局buffer
+            episode_steps = len(episode_buffer['state'])
+            for key in buffer.keys():
+                buffer[key].extend(episode_buffer[key])
+            total_steps += episode_steps
+            episode_ends.append(total_steps)
+            successful_episodes += 1
+
+            print(f"  ✅ 成功 - 奖励: {ep_total_reward:.2f}, 成功次数: {ep_success_times}, 步数: {episode_steps}")
+        else:
+            # ❌ 质量不合格，丢弃此episode
+            reason = []
+            if not ep_final_success:
+                reason.append("最终未成功")
+            if ep_success_times < 5:
+                reason.append(f"成功次数不足({ep_success_times}<5)")
+            print(f"  ❌ 失败 - {', '.join(reason)} - 奖励: {ep_total_reward:.2f}, 丢弃该轨迹")
 
     # 5. 写入 Zarr 文件
     print(f"正在写入硬盘: {SAVE_DIR} ...")
@@ -118,10 +161,19 @@ def collect_data():
     # 保存 meta 信息
     meta_group.create_dataset('episode_ends', data=np.array(episode_ends, dtype=np.int64))
 
-    print("\n采集成功！")
+    print("\n" + "="*70)
+    print("采集完成！")
+    print("="*70)
+    print(f"总尝试次数: {total_attempts}")
+    print(f"成功Episode: {successful_episodes}/{total_attempts} ({successful_episodes/total_attempts*100:.1f}%)")
     print(f"总步数: {total_steps}")
-    print(f"State 维度: {np.array(buffer['state']).shape[1]} (期望是 9)")
-    print(f"Point Cloud 维度: {np.array(buffer['point_cloud']).shape[1:]} (期望是 1024, 6)")
+    print(f"平均Episode长度: {total_steps/successful_episodes:.1f} 步")
+    print(f"\n数据维度:")
+    print(f"  State: {np.array(buffer['state']).shape} (期望是 [N, 9])")
+    print(f"  Point Cloud: {np.array(buffer['point_cloud']).shape} (期望是 [N, 512, 3] 或 [N, 512, 6])")
+    print(f"  Full State: {np.array(buffer['full_state']).shape} (期望是 [N, 39])")
+    print(f"  Action: {np.array(buffer['action']).shape}")
+    print("="*70)
 
 if __name__ == "__main__":
     # 为了避免 MuJoCo 渲染在某些 headless 服务器上报错

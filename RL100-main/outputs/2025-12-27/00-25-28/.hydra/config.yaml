@@ -1,0 +1,153 @@
+task:
+  name: dial-turn
+  env_name: dial-turn
+  shape_meta:
+    obs:
+      point_cloud:
+        shape:
+        - 512
+        - 3
+        type: point_cloud
+      agent_pos:
+        shape:
+        - 9
+        type: low_dim
+    action:
+      shape:
+      - 4
+  env_runner:
+    _target_: diffusion_policy_3d.env_runner.metaworld_runner.MetaworldRunner
+    n_train: 0
+    n_test: 20
+    max_steps: 200
+    eval_episodes: 20
+    fps: 10
+    task_name: ${task.env_name}
+    device: ${training.device}
+    use_point_crop: true
+  dataset:
+    _target_: diffusion_policy_3d.dataset.offline_dataset.OfflineRLDataset
+    zarr_path: data/metaworld_wrapper_data/dial_turn_demos
+    horizon: 4
+    pad_before: 1
+    pad_after: 2
+    seed: 42
+    val_ratio: 0.05
+    max_train_episodes: null
+    task_type: metaworld
+    reward_type: sparse
+    target_pos: null
+    full_state_dim: 39
+    augment_pc: false
+    pc_transform: null
+    pc_scale:
+    - 1
+    - 1
+    - 1
+    pc_offset:
+    - 0
+    - 0
+    - 0
+    pointcloud_encoder_cfg:
+      in_channels: 3
+      out_channels: 64
+      use_layernorm: true
+      final_norm: none
+      use_projection: true
+      in_channels_points: 512
+policy:
+  _target_: diffusion_policy_3d.policy.rl100.RL100
+  use_variance_clipping: true
+  sigma_min: 0.01
+  sigma_max: 0.8
+  shape_meta: ${task.shape_meta}
+  noise_scheduler:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    num_train_timesteps: 100
+    beta_start: 0.0001
+    beta_end: 0.02
+    beta_schedule: squaredcos_cap_v2
+    variance_type: fixed_small
+    clip_sample: true
+    prediction_type: epsilon
+  horizon: 4
+  n_action_steps: 3
+  n_obs_steps: 2
+  num_inference_steps: 10
+  obs_as_global_cond: true
+  diffusion_step_embed_dim: 128
+  down_dims:
+  - 128
+  - 256
+  - 512
+  kernel_size: 5
+  n_groups: 8
+  condition_type: film
+  crop_shape: null
+  use_pc_color: false
+  pointnet_type: pointnet
+  encoder_output_dim: 64
+  state_mlp_size:
+  - 64
+  - 64
+  state_mlp_activation_fn: relu
+  pointcloud_encoder_cfg: ${task.dataset.pointcloud_encoder_cfg}
+  gamma: 0.99
+  beta_recon_rl: 0.1
+  beta_kl_rl: 0.0001
+  value_hidden_dims:
+  - 256
+  - 256
+  omega: 0.7
+  is_double_q: true
+  amq_threshold: 0.05
+  amq_weight: 1.0
+  use_hierarchical_mdp: true
+  diffusion_step_gamma: 0.99
+  gae_lambda: 0.95
+training:
+  seed: 42
+  device: cuda:0
+  use_sparse_reward: true
+  sparse_reward_value: 1.0
+  il_epochs: 1000
+  rl_iterations: 10
+  rl_epochs_per_iter: 50
+  rollout_episodes: 15
+  iql_epochs_per_iter: 10
+  il_finetune_enabled: true
+  il_finetune_epochs: 5
+  data_quality_threshold: 0.3
+  online_rl_enabled: true
+  online_rl_epochs: 30
+  online_rollout_episodes: 30
+  online_replay_size: 5000
+  phase3_lr_factor: 0.1
+  max_online_datasets: 5
+  eval_freq: 2
+  keep_top_k_checkpoints: 5
+  target_update_freq: 30
+  grad_clip_norm: 10.0
+  use_ema: true
+  ema_power: 0.999
+  total_steps: 35000
+  resume_path: null
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 5.0e-05
+  weight_decay: 1.0e-06
+  betas:
+  - 0.9
+  - 0.999
+  eps: 1.0e-08
+lr_scheduler:
+  name: cosine
+  warmup_steps: 1750
+dataloader:
+  batch_size: 128
+  num_workers: 4
+logging:
+  project: RL100-MetaWorld-v3
+  name: rl100_${now:%Y%m%d_%H%M%S}
+  log_freq: 10
+  wandb_mode: offline
