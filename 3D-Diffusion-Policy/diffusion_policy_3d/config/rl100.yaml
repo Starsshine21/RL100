@@ -1,0 +1,190 @@
+# RL-100 Configuration
+# =====================
+# Configuration for RL-100 training pipeline on 3D-Diffusion-Policy tasks.
+#
+# This config extends the base DP3 config with:
+# - RL100Policy (PPO-enabled diffusion policy)
+# - IQL Critics (Q and V networks)
+# - Consistency Model (fast 1-step generation)
+# - Training loop parameters
+
+defaults:
+  - task: metaworld_push  # Task configuration (metaworld_push, adroit_hammer, etc.)
+  - _self_
+
+# ============================================
+# Policy Configuration (RL100Policy)
+# ============================================
+policy:
+  _target_: diffusion_policy_3d.policy.rl100_policy.RL100Policy
+
+  # Architecture (same as DP3)
+  horizon: 16
+  n_obs_steps: 2
+  n_action_steps: 8
+  encoder_output_dim: 64
+  diffusion_step_embed_dim: 128
+  down_dims: [512, 1024, 2048]
+  kernel_size: 5
+  n_groups: 8
+  condition_type: film
+  use_pc_color: false
+  pointnet_type: "pointnet"
+  obs_as_global_cond: true
+
+  # Noise scheduler (DDIM with epsilon prediction)
+  noise_scheduler:
+    _target_: diffusers.schedulers.scheduling_ddim.DDIMScheduler
+    num_train_timesteps: 100
+    num_inference_steps: 10  # K=10 denoising steps
+    beta_schedule: squaredcos_cap_v2
+    clip_sample: true
+    prediction_type: epsilon  # MUST be epsilon for RL-100
+
+  # PointCloud encoder
+  pointcloud_encoder_cfg:
+    in_channels: 3
+    out_channels: 64
+    use_layernorm: true
+    final_norm: layernorm
+
+  # VIB (optional)
+  use_recon_vib: false
+  beta_recon: 1.0
+  beta_kl: 0.001
+
+  # RL-100 specific parameters
+  ppo_clip_eps: 0.2        # PPO clipping threshold ε
+  sigma_min: 0.01          # Minimum exploration std
+  sigma_max: 0.8           # Maximum exploration std
+  use_variance_clip: true  # Clip variance during sampling
+
+# ============================================
+# IQL Critics Configuration
+# ============================================
+critics:
+  hidden_dims: [256, 256, 256]  # MLP hidden dimensions
+  gamma: 0.99                    # Discount factor γ
+  tau: 0.7                       # Expectile parameter τ for V network
+  target_update_tau: 0.005       # Soft update coefficient for target V
+
+# ============================================
+# Optimizers
+# ============================================
+optimizer:
+  # Policy optimizer
+  policy:
+    _target_: torch.optim.AdamW
+    lr: 1.0e-4
+    weight_decay: 1.0e-6
+    betas: [0.9, 0.999]
+
+  # V network optimizer
+  v_network:
+    _target_: torch.optim.AdamW
+    lr: 3.0e-4
+    weight_decay: 1.0e-6
+
+  # Q network optimizer
+  q_network:
+    _target_: torch.optim.AdamW
+    lr: 3.0e-4
+    weight_decay: 1.0e-6
+
+  # Consistency model optimizer
+  consistency:
+    _target_: torch.optim.AdamW
+    lr: 1.0e-4
+    weight_decay: 1.0e-6
+
+# ============================================
+# EMA Configuration
+# ============================================
+ema:
+  _target_: diffusion_policy_3d.model.diffusion.ema_model.EMAModel
+  power: 0.75
+  max_value: 0.9999
+  min_value: 0.0
+
+# ============================================
+# Data Loading
+# ============================================
+dataloader:
+  batch_size: 256          # Batch size for training
+  num_workers: 8           # Number of dataloader workers
+  shuffle: true
+  pin_memory: true
+  drop_last: false
+  persistent_workers: true
+
+# ============================================
+# Training Configuration
+# ============================================
+training:
+  # General
+  device: cuda
+  seed: 42
+  use_ema: true
+
+  # Phase 1: Imitation Learning
+  il_epochs: 1000                    # Initial IL training epochs
+  il_retrain_epochs: 100             # IL retraining epochs after data collection
+  retrain_il_after_collection: true  # Whether to retrain IL after collecting data
+
+  # Phase 2: Offline RL
+  num_offline_iterations: 5          # M iterations of offline RL loop
+  critic_epochs: 50                  # Epochs to train IQL critics
+  ppo_epochs: 100                    # Epochs to optimize policy with PPO
+  collection_episodes: 50            # Episodes to collect per iteration
+  cd_every: 5                        # Consistency distillation frequency (steps)
+
+  # Phase 3: Online RL
+  run_online_rl: false               # Whether to run online RL fine-tuning
+  online_rl_iterations: 10           # Number of online RL iterations
+  online_collection_episodes: 20     # Episodes per online iteration
+
+  # Optimization
+  gradient_accumulate_every: 1
+  max_grad_norm: 1.0
+
+  # Logging & Evaluation
+  log_every: 10                      # Log metrics every N steps
+  eval_every: 100                    # Evaluate every N epochs
+  checkpoint_every: 200              # Save checkpoint every N epochs
+
+  # Resume
+  resume: false
+  resume_path: null
+
+# ============================================
+# Checkpoint Configuration
+# ============================================
+checkpoint:
+  save_ckpt: true
+  save_last_ckpt: true
+  save_last_snapshot: false
+
+  topk:
+    monitor_key: test_mean_score
+    mode: max
+    k: 1
+
+# ============================================
+# Logging Configuration
+# ============================================
+logging:
+  use_wandb: true
+  project: rl100-dp3
+  group: ${task.name}
+  name: rl100_${task.name}_seed${training.seed}
+  mode: online  # online, offline, or disabled
+
+# ============================================
+# Hydra Configuration
+# ============================================
+hydra:
+  run:
+    dir: outputs/${logging.name}/${now:%Y-%m-%d}_${now:%H-%M-%S}
+  sweep:
+    dir: outputs/${logging.name}
+    subdir: ${now:%Y-%m-%d}_${now:%H-%M-%S}

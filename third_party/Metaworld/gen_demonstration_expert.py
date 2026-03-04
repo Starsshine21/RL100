@@ -55,8 +55,10 @@ def main(args):
 	full_state_arrays = []
 	action_arrays = []
 	episode_ends_arrays = []
-    
-	
+	reward_arrays = []
+	done_arrays = []
+
+
 	episode_idx = 0
 	
 
@@ -82,6 +84,7 @@ def main(args):
 		state_arrays_sub = []
 		full_state_arrays_sub = []
 		action_arrays_sub = []
+		reward_arrays_sub = []
 		total_count_sub = 0
   
 		while not done:
@@ -106,7 +109,8 @@ def main(args):
 			obs_dict, reward, done, info = e.step(action)
 			raw_state = obs_dict['full_state']
 			ep_reward += reward
-   
+			reward_arrays_sub.append(float(reward))
+
 
 			ep_success = ep_success or info['success']
 			ep_success_times += info['success']
@@ -127,6 +131,10 @@ def main(args):
 			state_arrays.extend(copy.deepcopy(state_arrays_sub))
 			action_arrays.extend(copy.deepcopy(action_arrays_sub))
 			full_state_arrays.extend(copy.deepcopy(full_state_arrays_sub))
+			done_sub = np.zeros(total_count_sub, dtype=np.float32)
+			done_sub[-1] = 1.0
+			reward_arrays.extend(copy.deepcopy(reward_arrays_sub))
+			done_arrays.extend(done_sub.tolist())
 			cprint('Episode: {}, Reward: {}, Success Times: {}'.format(episode_idx, ep_reward, ep_success_times), 'green')
 			episode_idx += 1
 	
@@ -149,6 +157,8 @@ def main(args):
 	depth_arrays = np.stack(depth_arrays, axis=0)
 	action_arrays = np.stack(action_arrays, axis=0)
 	episode_ends_arrays = np.array(episode_ends_arrays)
+	reward_arrays = np.array(reward_arrays, dtype=np.float32)
+	done_arrays = np.array(done_arrays, dtype=np.float32)
 
 	compressor = zarr.Blosc(cname='zstd', clevel=3, shuffle=1)
 	img_chunk_size = (100, img_arrays.shape[1], img_arrays.shape[2], img_arrays.shape[3])
@@ -163,6 +173,8 @@ def main(args):
 	zarr_data.create_dataset('point_cloud', data=point_cloud_arrays, chunks=point_cloud_chunk_size, dtype='float32', overwrite=True, compressor=compressor)
 	zarr_data.create_dataset('depth', data=depth_arrays, chunks=depth_chunk_size, dtype='float32', overwrite=True, compressor=compressor)
 	zarr_data.create_dataset('action', data=action_arrays, chunks=action_chunk_size, dtype='float32', overwrite=True, compressor=compressor)
+	zarr_data.create_dataset('reward', data=reward_arrays, chunks=(100,), dtype='float32', overwrite=True, compressor=compressor)
+	zarr_data.create_dataset('done', data=done_arrays, chunks=(100,), dtype='float32', overwrite=True, compressor=compressor)
 	zarr_meta.create_dataset('episode_ends', data=episode_ends_arrays, dtype='int64', overwrite=True, compressor=compressor)
 
 	cprint(f'-'*50, 'cyan')
@@ -173,10 +185,13 @@ def main(args):
 	cprint(f'state shape: {state_arrays.shape}, range: [{np.min(state_arrays)}, {np.max(state_arrays)}]', 'green')
 	cprint(f'full_state shape: {full_state_arrays.shape}, range: [{np.min(full_state_arrays)}, {np.max(full_state_arrays)}]', 'green')
 	cprint(f'action shape: {action_arrays.shape}, range: [{np.min(action_arrays)}, {np.max(action_arrays)}]', 'green')
+	cprint(f'reward shape: {reward_arrays.shape}, range: [{np.min(reward_arrays):.3f}, {np.max(reward_arrays):.3f}]', 'green')
+	cprint(f'done shape: {done_arrays.shape}, num_terminals: {int(np.sum(done_arrays))}', 'green')
 	cprint(f'Saved zarr file to {save_dir}', 'green')
 
 	# clean up
 	del img_arrays, state_arrays, point_cloud_arrays, action_arrays, episode_ends_arrays
+	del reward_arrays, done_arrays
 	del zarr_root, zarr_data, zarr_meta
 	del e
 

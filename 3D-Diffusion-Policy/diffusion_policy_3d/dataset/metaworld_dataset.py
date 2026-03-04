@@ -2,6 +2,7 @@ from typing import Dict
 import torch
 import numpy as np
 import copy
+import zarr
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 from diffusion_policy_3d.common.replay_buffer import ReplayBuffer
 from diffusion_policy_3d.common.sampler import (
@@ -11,7 +12,7 @@ from diffusion_policy_3d.dataset.base_dataset import BaseDataset
 
 class MetaworldDataset(BaseDataset):
     def __init__(self,
-            zarr_path, 
+            zarr_path,
             horizon=1,
             pad_before=0,
             pad_after=0,
@@ -20,8 +21,17 @@ class MetaworldDataset(BaseDataset):
             max_train_episodes=None,
             ):
         super().__init__()
+
+        # Check which keys are available (support both old and new zarr formats)
+        _zarr_store = zarr.open(zarr_path, 'r')
+        _available_keys = list(_zarr_store['data'].keys())
+        self.has_rl_data = 'reward' in _available_keys and 'done' in _available_keys
+        keys_to_load = ['state', 'action', 'point_cloud']
+        if self.has_rl_data:
+            keys_to_load.extend(['reward', 'done'])
+
         self.replay_buffer = ReplayBuffer.copy_from_path(
-            zarr_path, keys=['state', 'action', 'point_cloud'])
+            zarr_path, keys=keys_to_load)
         val_mask = get_val_mask(
             n_episodes=self.replay_buffer.n_episodes, 
             val_ratio=val_ratio,
@@ -84,6 +94,35 @@ class MetaworldDataset(BaseDataset):
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         sample = self.sampler.sample_sequence(idx)
         data = self._sample_to_data(sample)
+
+        if self.has_rl_data:
+            # Reward and done at the first timestep of the sampled window
+            data['reward'] = np.array(sample['reward'][0], dtype=np.float32)
+            data['done'] = np.array(sample['done'][0], dtype=np.float32)
+
+            # next_obs: load the obs window starting 1 step ahead of the current window
+            buffer_start_idx, _, _, _ = self.sampler.indices[idx]
+            total_len = len(self.replay_buffer['state'])
+            next_idx = min(buffer_start_idx + 1, total_len - 1)
+            next_end_idx = min(next_idx + self.horizon, total_len)
+
+            next_state = self.replay_buffer['state'][next_idx:next_end_idx].astype(np.float32)
+            next_pc = self.replay_buffer['point_cloud'][next_idx:next_end_idx].astype(np.float32)
+
+            # Pad if we're near the end of the buffer
+            actual_len = len(next_state)
+            if actual_len < self.horizon:
+                pad_len = self.horizon - actual_len
+                next_state = np.concatenate(
+                    [next_state, np.tile(next_state[-1:], (pad_len,) + (1,) * (next_state.ndim - 1))], axis=0)
+                next_pc = np.concatenate(
+                    [next_pc, np.tile(next_pc[-1:], (pad_len,) + (1,) * (next_pc.ndim - 1))], axis=0)
+
+            data['next_obs'] = {
+                'agent_pos': next_state,
+                'point_cloud': next_pc,
+            }
+
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
 
