@@ -29,11 +29,12 @@ Args:
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import numpy as np
 import wandb
 import copy
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from termcolor import cprint
 import hydra
 from omegaconf import OmegaConf
@@ -43,6 +44,8 @@ except ImportError:
     plt = None
 
 from diffusion_policy_3d.policy.rl100_policy import RL100Policy
+from diffusion_policy_3d.policy.consistency_policy import ConsistencyPolicyWrapper
+from diffusion_policy_3d.policy.base_policy import BasePolicy
 from diffusion_policy_3d.model.rl.iql_critics import IQLCritics
 from diffusion_policy_3d.model.rl.consistency_model import ConsistencyModel, ConsistencyDistillation
 from diffusion_policy_3d.model.rl.transition_model import TransitionModel
@@ -114,11 +117,12 @@ class RL100Trainer:
         # Initialize IQL Critics
         cprint("[RL100Trainer] Initializing IQL Critics...", "cyan")
         obs_dim = self.policy.obs_feature_dim * self.policy.n_obs_steps  # Flattened obs feature dim across all obs steps
-        action_dim = self.policy.action_dim
+        critic_action_dim = self.policy.chunk_action_dim
+        model_action_dim = self.policy.action_dim
 
         self.critics = IQLCritics(
             obs_dim=obs_dim,
-            action_dim=action_dim,
+            action_dim=critic_action_dim,
             hidden_dims=config.critics.hidden_dims,
             gamma=config.critics.gamma,
             tau=config.critics.tau
@@ -138,8 +142,12 @@ class RL100Trainer:
         # Initialize Consistency Model
         cprint("[RL100Trainer] Initializing Consistency Model...", "cyan")
         self.consistency_model = ConsistencyModel(
-            input_dim=action_dim,
-            global_cond_dim=obs_dim,  # obs_dim = obs_feature_dim * n_obs_steps, already flattened
+            input_dim=model_action_dim,
+            global_cond_dim=(
+                self.policy.obs_feature_dim
+                if "cross_attention" in self.policy.condition_type
+                else obs_dim
+            ),
             diffusion_step_embed_dim=config.policy.diffusion_step_embed_dim,
             down_dims=config.policy.down_dims,
             condition_type=config.policy.condition_type
@@ -161,7 +169,7 @@ class RL100Trainer:
         cprint("[RL100Trainer] Initializing Transition Model T_θ(s'|s,a)...", "cyan")
         self.transition_model = TransitionModel(
             obs_feature_dim=obs_dim,    # same flattened dim used by critics
-            action_dim=action_dim,
+            action_dim=critic_action_dim,
             hidden_dims=(200, 200, 200, 200),
             num_ensemble=7,
             num_elites=5,
@@ -172,6 +180,73 @@ class RL100Trainer:
         self.global_step = 0
         self.epoch = 0
         self.offline_rl_iteration = 0
+
+    def _encode_obs_representations(
+        self,
+        obs_dict: Dict[str, torch.Tensor],
+        policy: Optional[RL100Policy] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        policy = self.policy if policy is None else policy
+        nobs = policy.normalizer.normalize(obs_dict)
+        if not policy.use_pc_color:
+            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
+        this_nobs = dict_apply(
+            nobs,
+            lambda x: x[:, :policy.n_obs_steps, ...].reshape(-1, *x.shape[2:])
+        )
+        obs_features = policy.obs_encoder(this_nobs)
+        batch_size = next(iter(obs_dict.values())).shape[0]
+        flat_obs_features = obs_features.reshape(batch_size, -1)
+        if "cross_attention" in policy.condition_type:
+            global_cond = obs_features.reshape(batch_size, policy.n_obs_steps, -1)
+        else:
+            global_cond = flat_obs_features
+        return flat_obs_features, global_cond
+
+    def _encode_obs_features(self, obs_dict: Dict[str, torch.Tensor], policy: Optional[RL100Policy] = None) -> torch.Tensor:
+        flat_obs_features, _ = self._encode_obs_representations(obs_dict, policy=policy)
+        return flat_obs_features
+
+    def _should_apply_obs_regularization(self) -> bool:
+        if not getattr(self.policy, 'use_recon_vib', False):
+            return False
+        return any(param.requires_grad for param in self.policy.obs_encoder.parameters())
+
+    def _compute_obs_regularization(self, obs_dict: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, float]]:
+        if not self._should_apply_obs_regularization():
+            zero = torch.zeros((), device=self.device)
+            return zero, {
+                'kl_loss': 0.0,
+                'recon_loss': 0.0,
+                'recon_loss_pc': 0.0,
+                'recon_loss_state': 0.0,
+                'total_reg_loss': 0.0,
+            }
+        return self.policy.compute_obs_regularization(obs_dict)
+
+    def _extract_chunk_action(self, action_trajectory: torch.Tensor) -> torch.Tensor:
+        return self.policy.extract_action_chunk(action_trajectory)
+
+    def _normalize_chunk_action(self, action_trajectory: torch.Tensor) -> torch.Tensor:
+        chunk_action = self._extract_chunk_action(action_trajectory)
+        return self.policy.normalizer['action'].normalize(chunk_action)
+
+    def _flatten_normalized_chunk_action(self, action_trajectory: torch.Tensor) -> torch.Tensor:
+        normalized_chunk = self._normalize_chunk_action(action_trajectory)
+        return normalized_chunk.reshape(normalized_chunk.shape[0], -1)
+
+    def get_runtime_policy(self, mode: str = 'ddim', use_ema: bool = False) -> BasePolicy:
+        teacher_policy = self.ema_policy if use_ema and self.ema_policy is not None else self.policy
+        mode = str(mode).lower()
+        if mode == 'cm':
+            runtime_policy = ConsistencyPolicyWrapper(teacher_policy=teacher_policy, consistency_model=self.consistency_model)
+            runtime_policy.to(self.device)
+            runtime_policy.eval()
+            return runtime_policy
+        if mode != 'ddim':
+            raise ValueError(f"Unsupported runtime policy mode: {mode}")
+        teacher_policy.eval()
+        return teacher_policy
 
     @property
     def output_dir(self) -> str:
@@ -277,6 +352,14 @@ class RL100Trainer:
         config = self.config
         self.policy.train()
 
+        if val_dataset is None and hasattr(dataset, 'get_validation_dataset'):
+            try:
+                candidate_val_dataset = dataset.get_validation_dataset()
+                if len(candidate_val_dataset) > 0:
+                    val_dataset = candidate_val_dataset
+            except Exception:
+                val_dataset = None
+
         # Create dataloader
         train_dataloader = DataLoader(
             dataset,
@@ -285,6 +368,15 @@ class RL100Trainer:
             num_workers=config.dataloader.num_workers,
             pin_memory=True
         )
+        val_dataloader = None
+        if val_dataset is not None and len(val_dataset) > 0:
+            val_dataloader = DataLoader(
+                val_dataset,
+                batch_size=config.dataloader.batch_size,
+                shuffle=False,
+                num_workers=config.dataloader.num_workers,
+                pin_memory=True
+            )
 
         # Set normalizer
         normalizer = dataset.get_normalizer()
@@ -331,7 +423,29 @@ class RL100Trainer:
             # Epoch end
             avg_loss = np.mean(epoch_losses)
             il_loss_per_epoch.append(float(avg_loss))
-            cprint(f"[IL] Epoch {epoch}/{num_epochs}, Loss: {avg_loss:.4f}", "green")
+            val_loss = None
+            if val_dataloader is not None:
+                self.policy.eval()
+                val_losses = []
+                with torch.no_grad():
+                    for val_batch in val_dataloader:
+                        val_batch = dict_apply(val_batch, lambda x: x.to(self.device, non_blocking=True))
+                        batch_val_loss, _ = self.policy.compute_loss(val_batch)
+                        val_losses.append(batch_val_loss.item())
+                self.policy.train()
+                if val_losses:
+                    val_loss = float(np.mean(val_losses))
+
+            if val_loss is None:
+                cprint(f"[IL] Epoch {epoch}/{num_epochs}, Loss: {avg_loss:.4f}", "green")
+            else:
+                cprint(f"[IL] Epoch {epoch}/{num_epochs}, Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}", "green")
+
+            if val_loss is not None and config.logging.use_wandb:
+                wandb.log({
+                    'il/val_loss': val_loss,
+                    'il/epoch': epoch,
+                }, step=self.global_step)
 
             # Evaluate
             if env_runner is not None and (epoch + 1) % config.training.eval_every == 0:
@@ -451,24 +565,13 @@ class RL100Trainer:
 
                 # Extract data
                 obs_dict = batch['obs']
-                action = batch['action'][:, 0, :]  # [B, horizon, Da] -> [B, Da]
 
                 # Encode observations to get features
                 with torch.no_grad():
-                    nobs = self.policy.normalizer.normalize(obs_dict)
-                    if not self.policy.use_pc_color:
-                        nobs['point_cloud'] = nobs['point_cloud'][..., :3]
+                    obs_features = self._encode_obs_features(obs_dict)
 
-                    this_nobs = dict_apply(
-                        nobs,
-                        lambda x: x[:, :self.policy.n_obs_steps, ...].reshape(-1, *x.shape[2:])
-                    )
-                    this_nobs = dict_apply(this_nobs, lambda x: x.to(self.device))
-                    obs_features = self.policy.obs_encoder(this_nobs)
-                    obs_features = obs_features.reshape(batch['action'].shape[0], -1)
-
-                # Normalize action
-                naction = self.policy.normalizer['action'].normalize(action)
+                # Normalize chunk action: the full executed action chunk is one MDP decision.
+                naction = self._flatten_normalized_chunk_action(batch['action'])
 
                 # 1. Update V network
                 v_loss, v_info = self.critics.compute_v_loss(obs_features, naction)
@@ -503,15 +606,7 @@ class RL100Trainer:
                     # Encode actual next obs (at t + n_action_steps) from dataset
                     with torch.no_grad():
                         next_obs_raw = batch['next_obs']  # nested dict, already on device
-                        nnext_obs = self.policy.normalizer.normalize(next_obs_raw)
-                        if not self.policy.use_pc_color:
-                            nnext_obs['point_cloud'] = nnext_obs['point_cloud'][..., :3]
-                        this_next_nobs = dict_apply(
-                            nnext_obs,
-                            lambda x: x[:, :self.policy.n_obs_steps].reshape(-1, *x.shape[2:])
-                        )
-                        next_obs_features = self.policy.obs_encoder(this_next_nobs)
-                        next_obs_features = next_obs_features.reshape(B, -1)
+                        next_obs_features = self._encode_obs_features(next_obs_raw)
 
                     q_loss, q_info = self.critics.compute_q_loss(
                         obs_features, naction, reward, next_obs_features, done
@@ -585,15 +680,22 @@ class RL100Trainer:
 
         Reads ``self.config.critics.reward_type``:
           - 'sparse': reward=1 at last step, 0 elsewhere
-          - 'dense' : reward=10 every step (matching MetaWorld shaped scale)
+          - 'dense' : unsupported for unlabeled demos because shaped rewards
+                      cannot be reconstructed after the fact
         """
         import numpy as np
         rb = dataset.replay_buffer
 
         if dataset.has_rl_data:
+            cprint("[RL100Trainer] Dataset already contains reward/done labels; keep existing rewards.", "yellow")
             return  # Already has rewards, nothing to do
 
         reward_type = getattr(self.config.critics, 'reward_type', 'sparse')
+        if reward_type != 'sparse':
+            raise ValueError(
+                "Cannot auto-relabel unlabeled demos with true dense rewards. "
+                "Use sparse rewards or provide replay data that already contains reward/done labels."
+            )
 
         n_episodes = rb.n_episodes
         episode_ends = rb.episode_ends[:]
@@ -606,10 +708,7 @@ class RL100Trainer:
             start = int(episode_starts[ep_idx])
             end   = int(episode_ends[ep_idx])
             if end > start:
-                if reward_type == 'dense':
-                    reward_array[start:end] = 10.0
-                else:
-                    reward_array[end - 1] = 1.0
+                reward_array[end - 1] = 1.0
                 done_array[end - 1] = 1.0
 
         rb.data.create_dataset('reward', data=reward_array, overwrite=True)
@@ -617,17 +716,14 @@ class RL100Trainer:
 
         dataset.has_rl_data = True
 
-        from diffusion_policy_3d.common.sampler import SequenceSampler
         n_total = rb.n_episodes
-        episode_mask = np.ones(n_total, dtype=bool)
-        dataset.sampler = SequenceSampler(
-            replay_buffer=rb,
-            sequence_length=dataset.horizon,
-            pad_before=dataset.pad_before,
-            pad_after=dataset.pad_after,
-            episode_mask=episode_mask,
+        existing_mask = np.asarray(
+            getattr(dataset, 'train_mask', np.ones(n_total, dtype=bool)),
+            dtype=bool,
         )
-        dataset.train_mask = episode_mask
+        episode_mask = existing_mask if len(existing_mask) == n_total else np.ones(n_total, dtype=bool)
+        if hasattr(dataset, '_rebuild_sampler'):
+            dataset._rebuild_sampler(episode_mask)
 
         cprint(f"[RL100Trainer] Relabeled {n_episodes} episodes "
                f"({rb.n_steps} steps) with reward_type={reward_type}.", "green")
@@ -660,7 +756,7 @@ class RL100Trainer:
         loader = _DL(dataset, batch_size=self.config.dataloader.batch_size,
                      shuffle=True, num_workers=0, pin_memory=True)
 
-        eval_policy = self.ema_policy if self.ema_policy is not None else self.policy
+        eval_policy = self.policy
         eval_policy.eval()
         self.critics.eval()
         cumulative_q = []
@@ -674,35 +770,17 @@ class RL100Trainer:
                 obs_dict = batch['obs']
 
                 # Encode initial observations
-                nobs = eval_policy.normalizer.normalize(obs_dict)
-                if not eval_policy.use_pc_color:
-                    nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-                this_nobs = dict_apply(
-                    nobs,
-                    lambda x: x[:, :eval_policy.n_obs_steps].reshape(-1, *x.shape[2:])
-                )
-                obs_features = eval_policy.obs_encoder(this_nobs)
-                obs_features = obs_features.reshape(batch['action'].shape[0], -1)
+                obs_features = self._encode_obs_features(obs_dict, policy=eval_policy)
 
                 # H-step rollout
                 batch_q_sum = torch.zeros(obs_features.shape[0], 1, device=self.device)
                 cur_features = obs_features
 
                 for h in range(rollout_horizon):
-                    # Sample action from policy (simplified: use predict_action for h=0,
-                    # for h>0 we'd need to reconstruct obs_dict from features — approximate
-                    # by sampling random actions from the policy in feature space)
-                    if h == 0:
-                        action_pred = eval_policy.predict_action(obs_dict)
-                        action = action_pred['action'][:, 0, :]
-                        naction = eval_policy.normalizer['action'].normalize(action)
-                    else:
-                        # For h>0, we can't easily reconstruct obs_dict from features.
-                        # Use the Q-network's own action via argmax approximation:
-                        # sample a batch of random actions and pick the one with max Q.
-                        # For efficiency, just sample one action from N(0,1) in normalised space.
-                        naction = torch.randn(cur_features.shape[0], self.policy.action_dim,
-                                              device=self.device) * 0.3
+                    action_pred = eval_policy.predict_action_from_global_cond(cur_features)
+                    naction = eval_policy.normalizer['action'].normalize(
+                        action_pred['action']
+                    ).reshape(cur_features.shape[0], -1)
 
                     # Accumulate discounted Q
                     q = self.critics.get_q_value(cur_features, naction)  # [B, 1]
@@ -755,6 +833,15 @@ class RL100Trainer:
         # ── Step 1: Save snapshot for potential rollback ──────────────────────────
         policy_snapshot = copy.deepcopy(self.policy.state_dict())
         ema_snapshot = copy.deepcopy(self.ema_policy.state_dict()) if self.ema_policy is not None else None
+        ema_helper_snapshot = None
+        if self.ema_policy is not None and hasattr(self, 'ema'):
+            ema_helper_snapshot = {
+                'decay': self.ema.decay,
+                'optimization_step': self.ema.optimization_step,
+            }
+        consistency_snapshot = copy.deepcopy(self.consistency_model.state_dict())
+        policy_optimizer_snapshot = copy.deepcopy(self.policy_optimizer.state_dict())
+        consistency_optimizer_snapshot = copy.deepcopy(self.consistency_optimizer.state_dict())
 
         # ── Step 1b: Reduce policy LR for RL fine-tuning (tag3: 10× smaller than IL) ─
         rl_lr = getattr(config.training, 'rl_policy_lr', 1e-5)
@@ -789,27 +876,17 @@ class RL100Trainer:
         for epoch in range(num_epochs):
             ppo_losses = []
             cd_losses = []
+            reg_losses = []
 
             for batch_idx, batch in enumerate(train_dataloader):
                 batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
 
                 obs_dict = batch['obs']
-                action = batch['action'][:, 0, :]  # [B, horizon, Da] -> [B, Da]
 
                 # Encode observations (encoder is frozen — no_grad is redundant but explicit)
                 with torch.no_grad():
-                    nobs = self.policy.normalizer.normalize(obs_dict)
-                    if not self.policy.use_pc_color:
-                        nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-
-                    this_nobs = dict_apply(
-                        nobs,
-                        lambda x: x[:, :self.policy.n_obs_steps, ...].reshape(-1, *x.shape[2:])
-                    )
-                    obs_features = self.policy.obs_encoder(this_nobs)
-                    obs_features = obs_features.reshape(batch['action'].shape[0], -1)
-
-                    naction = self.policy.normalizer['action'].normalize(action)
+                    obs_features, global_cond = self._encode_obs_representations(obs_dict)
+                    naction = self._flatten_normalized_chunk_action(batch['action'])
 
                     # Compute raw advantage A = Q(s,a) - V(s)
                     advantages = self.critics.compute_advantage(obs_features, naction)
@@ -820,22 +897,31 @@ class RL100Trainer:
                 advantages = (advantages - adv_mean) / adv_std
 
                 # ── Sample old trajectory ONCE per batch (fix old policy) ─────────
-                trajectory_old, log_probs_old = self.policy.sample_for_ppo(obs_dict)
+                trajectory_old, log_probs_old = self.policy.sample_for_ppo(global_cond=global_cond)
+                run_cd_this_batch = (self.global_step % config.training.cd_every == 0)
 
                 # ── Inner PPO loop: N gradient steps with SAME old trajectory ─────
                 for ppo_inner in range(ppo_inner_steps):
                     ppo_loss, ppo_info = self.policy.compute_ppo_loss(
-                        obs_dict=obs_dict,
+                        obs_dict=None,
                         old_log_probs=log_probs_old,
                         advantages=advantages,
-                        trajectory=trajectory_old
+                        trajectory=trajectory_old,
+                        global_cond=global_cond,
                     )
 
-                    # Paper Eq.22: L_total = L_RL + λ_CD · L_CD
-                    # Joint optimization — CD loss backprops through policy too
+                    # Apply consistency distillation at most once per outer batch.
                     total_loss = ppo_loss
-                    if self.global_step % config.training.cd_every == 0:
-                        cd_loss, cd_info = self.consistency_distillation.compute_distillation_loss(obs_dict)
+                    reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
+                    if reg_info['total_reg_loss'] > 0:
+                        total_loss = total_loss + reg_loss
+                        reg_losses.append(reg_info['total_reg_loss'])
+                    run_cd_step = run_cd_this_batch and ppo_inner == 0
+                    if run_cd_step:
+                        cd_loss, cd_info = self.consistency_distillation.compute_distillation_loss(
+                            obs_dict,
+                            global_cond=global_cond,
+                        )
                         total_loss = ppo_loss + lambda_cd * cd_loss
                         cd_losses.append(cd_info['cd_loss'])
 
@@ -846,7 +932,7 @@ class RL100Trainer:
                     torch.nn.utils.clip_grad_norm_(self.policy.parameters(), config.training.max_grad_norm)
                     self.policy_optimizer.step()
                     # Update consistency model params too
-                    if self.global_step % config.training.cd_every == 0:
+                    if run_cd_step:
                         self.consistency_optimizer.step()
 
                 ppo_losses.append(ppo_loss.item())
@@ -861,6 +947,8 @@ class RL100Trainer:
                         'ppo/loss': ppo_loss.item(),
                         **{f'ppo/{k}': v for k, v in ppo_info.items()}
                     }
+                    if reg_losses:
+                        log_dict['ppo/obs_reg_loss'] = reg_losses[-1]
                     if cd_losses:
                         log_dict['cd/loss'] = cd_losses[-1]
                     wandb.log(log_dict, step=self.global_step)
@@ -868,6 +956,7 @@ class RL100Trainer:
                 self.global_step += 1
 
             cprint(f"[Offline RL] Epoch {epoch}/{num_epochs}, PPO Loss: {np.mean(ppo_losses):.4f}, "
+                   f"Reg Loss: {np.mean(reg_losses) if reg_losses else 0:.4f}, "
                    f"CD Loss: {np.mean(cd_losses) if cd_losses else 0:.4f}", "green")
             ppo_loss_per_epoch.append(float(np.mean(ppo_losses) if ppo_losses else 0.0))
 
@@ -900,6 +989,12 @@ class RL100Trainer:
             self.policy.load_state_dict(policy_snapshot)
             if self.ema_policy is not None and ema_snapshot is not None:
                 self.ema_policy.load_state_dict(ema_snapshot)
+            if ema_helper_snapshot is not None and hasattr(self, 'ema'):
+                self.ema.decay = ema_helper_snapshot['decay']
+                self.ema.optimization_step = ema_helper_snapshot['optimization_step']
+            self.consistency_model.load_state_dict(consistency_snapshot)
+            self.policy_optimizer.load_state_dict(policy_optimizer_snapshot)
+            self.consistency_optimizer.load_state_dict(consistency_optimizer_snapshot)
 
         if config.logging.use_wandb:
             wandb.log({
@@ -908,12 +1003,18 @@ class RL100Trainer:
                 'ope/accepted': int(j_new - j_old >= delta),
             }, step=self.global_step)
 
-        return {'ppo_loss': np.mean(ppo_losses), 'cd_loss': np.mean(cd_losses) if cd_losses else 0}
+        return {
+            'ppo_loss': np.mean(ppo_losses),
+            'reg_loss': np.mean(reg_losses) if reg_losses else 0,
+            'cd_loss': np.mean(cd_losses) if cd_losses else 0
+        }
 
     def collect_new_data(
         self,
         env_runner,
-        num_episodes: int
+        num_episodes: int,
+        policy_mode: Optional[str] = None,
+        use_ema: Optional[bool] = None,
     ) -> Tuple[Dict, list]:
         """
         Phase 2c: Collect new data by rolling out policy in environment.
@@ -927,27 +1028,293 @@ class RL100Trainer:
         """
         cprint(f"\n[RL100Trainer] Phase 2c: Collecting New Data (Iteration {self.offline_rl_iteration})", "cyan")
 
-        eval_policy = self.ema_policy if self.ema_policy else self.policy
+        collection_mode = policy_mode
+        if collection_mode is None:
+            collection_mode = getattr(self.config.runtime, 'collection_policy', 'ddim') if 'runtime' in self.config else 'ddim'
+        collection_use_ema = False if use_ema is None else bool(use_ema)
+        if use_ema is None and 'runtime' in self.config:
+            collection_use_ema = bool(getattr(self.config.runtime, 'collection_use_ema', False))
+        eval_policy = self.get_runtime_policy(mode=collection_mode, use_ema=collection_use_ema)
         eval_policy.eval()
 
         with torch.no_grad():
             reward_type = getattr(self.config.critics, 'reward_type', 'sparse')
+            chunk_gamma = float(getattr(self.config.task.dataset, 'gamma', 0.99))
             metrics, episodes = env_runner.run_and_collect(
-                eval_policy, num_episodes=num_episodes, reward_type=reward_type)
+                eval_policy, num_episodes=num_episodes, reward_type=reward_type, gamma=chunk_gamma)
 
         cprint(f"[Data Collection] Success Rate: {metrics.get('mean_success_rates', 0):.3f}, "
-               f"Reward: {metrics.get('mean_traj_rewards', 0):.2f}, "
+               f"EnvReturn: {metrics.get('mean_env_rewards', metrics.get('mean_traj_rewards', 0)):.2f}, "
+               f"RLReward: {metrics.get('mean_rl_rewards', 0):.2f}, "
                f"Episodes: {len(episodes)}, Steps: {metrics.get('n_steps', 0)}", "green")
 
         if self.config.logging.use_wandb:
             wandb.log({
                 'collection/success_rate': metrics.get('mean_success_rates', 0),
-                'collection/reward':       metrics.get('mean_traj_rewards', 0),
+                'collection/reward':       metrics.get('mean_rl_rewards', metrics.get('mean_traj_rewards', 0)),
+                'collection/env_return':   metrics.get('mean_env_rewards', metrics.get('mean_traj_rewards', 0)),
+                'collection/rl_reward':    metrics.get('mean_rl_rewards', 0),
                 'collection/n_steps':      metrics.get('n_steps', 0),
             }, step=self.global_step)
 
         eval_policy.train()
         return metrics, episodes
+
+    def _filter_episodes_for_merge(
+        self,
+        episodes: List[dict],
+        stage: str,
+    ) -> List[dict]:
+        if not episodes:
+            return episodes
+
+        merge_success_only = bool(getattr(self.config.runtime, 'merge_success_only', False))
+        if not merge_success_only:
+            return episodes
+
+        kept_episodes = []
+        for episode in episodes:
+            if 'success' in episode:
+                is_success = bool(episode['success'])
+            else:
+                reward = np.asarray(episode.get('reward', []), dtype=np.float32)
+                is_success = bool(np.any(reward > 0))
+            if is_success:
+                kept_episodes.append(episode)
+
+        dropped = len(episodes) - len(kept_episodes)
+        cprint(
+            f"[Dataset] {stage}: keeping {len(kept_episodes)}/{len(episodes)} successful episodes "
+            f"(dropped {dropped} failures) before merge.",
+            "cyan",
+        )
+        return kept_episodes
+
+    def online_rl_optimize(
+        self,
+        online_episodes: List[dict],
+        num_epochs: int,
+    ) -> Dict:
+        """
+        Phase 3: On-policy online RL with GAE advantages and PPO updates.
+
+        Unlike offline RL, this stage uses fresh rollout trajectories and the
+        stored behavior-policy denoising trajectories collected during rollout.
+        """
+        config = self.config
+        lambda_v = float(getattr(config.training, 'lambda_v', 0.5))
+        gae_lambda = float(getattr(config.training, 'gae_lambda', 0.95))
+        gamma_chunk = self.critics.gamma
+        lambda_cd = float(getattr(config.training, 'lambda_cd', 1.0))
+
+        decision_episodes = []
+        for ep in online_episodes:
+            steps = [
+                step for step in ep.get('decision_steps', [])
+                if 'trajectory' in step and 'log_probs_old' in step
+            ]
+            if steps:
+                decision_episodes.append(steps)
+
+        if not decision_episodes:
+            cprint("[Online RL] No decision-level PPO data available; skip online optimization.", "yellow")
+            return {'v_loss': 0.0, 'ppo_loss': 0.0, 'n_decisions': 0}
+
+        self.policy.eval()
+        self.critics.eval()
+
+        rollout_buffer = []
+        with torch.no_grad():
+            for ep_steps in decision_episodes:
+                obs_dict = {
+                    'point_cloud': torch.from_numpy(
+                        np.stack([step['obs']['point_cloud'] for step in ep_steps], axis=0)
+                    ).to(self.device),
+                    'agent_pos': torch.from_numpy(
+                        np.stack([step['obs']['agent_pos'] for step in ep_steps], axis=0)
+                    ).to(self.device),
+                }
+                next_obs_dict = {
+                    'point_cloud': torch.from_numpy(
+                        np.stack([step['next_obs']['point_cloud'] for step in ep_steps], axis=0)
+                    ).to(self.device),
+                    'agent_pos': torch.from_numpy(
+                        np.stack([step['next_obs']['agent_pos'] for step in ep_steps], axis=0)
+                    ).to(self.device),
+                }
+                rewards = torch.as_tensor(
+                    [step['reward'] for step in ep_steps], dtype=torch.float32, device=self.device
+                )
+                dones = torch.as_tensor(
+                    [step['done'] for step in ep_steps], dtype=torch.float32, device=self.device
+                )
+
+                obs_features = self._encode_obs_features(obs_dict)
+                next_obs_features = self._encode_obs_features(next_obs_dict)
+                values = self.critics.get_value(obs_features).squeeze(-1)
+                next_values = self.critics.get_value(next_obs_features).squeeze(-1)
+
+                advantages = torch.zeros_like(rewards)
+                last_gae = torch.zeros((), dtype=torch.float32, device=self.device)
+                for t_step in reversed(range(len(ep_steps))):
+                    delta = rewards[t_step] + gamma_chunk * (1 - dones[t_step]) * next_values[t_step] - values[t_step]
+                    last_gae = delta + gamma_chunk * gae_lambda * (1 - dones[t_step]) * last_gae
+                    advantages[t_step] = last_gae
+                returns = advantages + values
+
+                for idx, step in enumerate(ep_steps):
+                    rollout_buffer.append({
+                        'obs': step['obs'],
+                        'trajectory': step['trajectory'],
+                        'log_probs_old': step['log_probs_old'],
+                        'obs_features': obs_features[idx].detach().cpu(),
+                        'return': float(returns[idx].item()),
+                        'advantage': float(advantages[idx].item()),
+                    })
+
+        all_advantages = torch.as_tensor(
+            [item['advantage'] for item in rollout_buffer],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        all_advantages = (all_advantages - all_advantages.mean()) / (all_advantages.std() + 1e-8)
+        for item, value in zip(rollout_buffer, all_advantages.detach().cpu().tolist()):
+            item['advantage'] = float(value)
+
+        # Value-function regression from Eq.21.
+        self.critics.train()
+        batch_size = min(config.dataloader.batch_size, len(rollout_buffer))
+        critic_indices = np.arange(len(rollout_buffer))
+        v_losses = []
+        for critic_epoch in range(5):
+            np.random.shuffle(critic_indices)
+            for start in range(0, len(critic_indices), batch_size):
+                idx = critic_indices[start:start + batch_size]
+                obs_features = torch.stack([rollout_buffer[i]['obs_features'] for i in idx]).to(self.device)
+                returns = torch.as_tensor(
+                    [rollout_buffer[i]['return'] for i in idx],
+                    dtype=torch.float32,
+                    device=self.device,
+                ).unsqueeze(-1)
+                v_pred = self.critics.get_value(obs_features)
+                v_loss = lambda_v * F.mse_loss(v_pred, returns)
+
+                self.v_optimizer.zero_grad()
+                v_loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.critics.v_network.parameters(), config.training.max_grad_norm)
+                self.v_optimizer.step()
+                self.critics.update_target_network(tau=config.critics.target_update_tau)
+                v_losses.append(v_loss.item())
+
+        # On-policy PPO over the stored rollout buffer.
+        self.policy.train()
+        self.critics.eval()
+        ppo_losses = []
+        cd_losses = []
+        reg_losses = []
+        policy_indices = np.arange(len(rollout_buffer))
+        for epoch in range(num_epochs):
+            np.random.shuffle(policy_indices)
+            epoch_ppo_losses = []
+            epoch_cd_losses = []
+            epoch_reg_losses = []
+            for start in range(0, len(policy_indices), batch_size):
+                idx = policy_indices[start:start + batch_size]
+                obs_dict = {
+                    'point_cloud': torch.from_numpy(
+                        np.stack([rollout_buffer[i]['obs']['point_cloud'] for i in idx], axis=0)
+                    ).to(self.device),
+                    'agent_pos': torch.from_numpy(
+                        np.stack([rollout_buffer[i]['obs']['agent_pos'] for i in idx], axis=0)
+                    ).to(self.device),
+                }
+                trajectories = [
+                    torch.from_numpy(
+                        np.stack([rollout_buffer[i]['trajectory'][k] for i in idx], axis=0)
+                    ).to(self.device)
+                    for k in range(len(rollout_buffer[idx[0]]['trajectory']))
+                ]
+                old_log_probs = [
+                    torch.from_numpy(
+                        np.stack([rollout_buffer[i]['log_probs_old'][k] for i in idx], axis=0)
+                    ).to(self.device).view(-1)
+                    for k in range(len(rollout_buffer[idx[0]]['log_probs_old']))
+                ]
+                advantages = torch.as_tensor(
+                    [rollout_buffer[i]['advantage'] for i in idx],
+                    dtype=torch.float32,
+                    device=self.device,
+                ).unsqueeze(-1)
+                _, global_cond = self._encode_obs_representations(obs_dict)
+
+                ppo_loss, ppo_info = self.policy.compute_ppo_loss(
+                    obs_dict=None,
+                    old_log_probs=old_log_probs,
+                    advantages=advantages,
+                    trajectory=trajectories,
+                    global_cond=global_cond,
+                )
+
+                total_loss = ppo_loss
+                reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
+                if reg_info['total_reg_loss'] > 0:
+                    total_loss = total_loss + reg_loss
+                    epoch_reg_losses.append(reg_info['total_reg_loss'])
+                run_cd_step = (self.global_step % config.training.cd_every == 0)
+                if run_cd_step:
+                    cd_loss, cd_info = self.consistency_distillation.compute_distillation_loss(
+                        obs_dict,
+                        global_cond=global_cond,
+                    )
+                    total_loss = ppo_loss + lambda_cd * cd_loss
+                    epoch_cd_losses.append(cd_info['cd_loss'])
+
+                self.policy_optimizer.zero_grad()
+                self.consistency_optimizer.zero_grad()
+                total_loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.policy.parameters(), config.training.max_grad_norm)
+                self.policy_optimizer.step()
+                if run_cd_step:
+                    self.consistency_optimizer.step()
+
+                if self.ema_policy is not None:
+                    self.ema.step(self.policy)
+
+                if config.logging.use_wandb and self.global_step % config.training.log_every == 0:
+                    log_dict = {
+                        'online/ppo_loss': ppo_loss.item(),
+                        **{f'online/{k}': v for k, v in ppo_info.items()}
+                    }
+                    if epoch_reg_losses:
+                        log_dict['online/obs_reg_loss'] = epoch_reg_losses[-1]
+                    if epoch_cd_losses:
+                        log_dict['online/cd_loss'] = epoch_cd_losses[-1]
+                    wandb.log(log_dict, step=self.global_step)
+
+                self.global_step += 1
+                epoch_ppo_losses.append(ppo_loss.item())
+
+            if epoch_ppo_losses:
+                ppo_losses.append(float(np.mean(epoch_ppo_losses)))
+            if epoch_cd_losses:
+                cd_losses.append(float(np.mean(epoch_cd_losses)))
+            if epoch_reg_losses:
+                reg_losses.append(float(np.mean(epoch_reg_losses)))
+            cprint(
+                f"[Online RL] Epoch {epoch + 1}/{num_epochs}, "
+                f"PPO Loss: {np.mean(epoch_ppo_losses) if epoch_ppo_losses else 0.0:.4f}, "
+                f"Reg Loss: {np.mean(epoch_reg_losses) if epoch_reg_losses else 0.0:.4f}, "
+                f"CD Loss: {np.mean(epoch_cd_losses) if epoch_cd_losses else 0.0:.4f}",
+                "green",
+            )
+
+        return {
+            'v_loss': float(np.mean(v_losses)) if v_losses else 0.0,
+            'ppo_loss': float(np.mean(ppo_losses)) if ppo_losses else 0.0,
+            'reg_loss': float(np.mean(reg_losses)) if reg_losses else 0.0,
+            'cd_loss': float(np.mean(cd_losses)) if cd_losses else 0.0,
+            'n_decisions': len(rollout_buffer),
+        }
 
     def run_pipeline(
         self,
@@ -1074,8 +1441,10 @@ class RL100Trainer:
             # 2d) Collect New Data + Merge  (Algorithm 1, Lines 10-11)
             collection_metrics, new_episodes = self.collect_new_data(
                 env_runner=env_runner,
-                num_episodes=config.training.collection_episodes
+                num_episodes=config.training.collection_episodes,
+                use_ema=False,
             )
+            new_episodes = self._filter_episodes_for_merge(new_episodes, stage='offline collection')
 
             # Algorithm 1 Line 11: D_{m+1} = D_m ∪ D_new
             if new_episodes:
@@ -1108,12 +1477,6 @@ class RL100Trainer:
             cprint(" "*20 + "PHASE 3: ONLINE RL FINE-TUNING", "green")
             cprint("="*80 + "\n", "green")
 
-            # Paper Eq.21: L_RL^on = -J_i(π) + λ_V · E[(V_ψ(s_t) - V̂_t)²]
-            # Uses GAE advantage instead of IQL advantage.
-            lambda_v = getattr(config.training, 'lambda_v', 0.5)
-            gae_lambda = getattr(config.training, 'gae_lambda', 0.95)
-            gamma_chunk = self.critics.gamma  # chunk-level discount
-
             # Reduce policy LR for online fine-tuning
             rl_lr = getattr(config.training, 'rl_policy_lr', 1e-5)
             for pg in self.policy_optimizer.param_groups:
@@ -1125,129 +1488,24 @@ class RL100Trainer:
                 # 1. Collect fresh data
                 collection_metrics, online_episodes = self.collect_new_data(
                     env_runner=env_runner,
-                    num_episodes=config.training.online_collection_episodes
+                    num_episodes=config.training.online_collection_episodes,
+                    policy_mode='ddim',
+                    use_ema=False,
                 )
+                online_episodes = self._filter_episodes_for_merge(online_episodes, stage='online collection')
 
                 if not online_episodes:
                     cprint("[Online RL] No episodes collected, skipping.", "yellow")
                     continue
 
-                # 2. Compute GAE advantages from collected episodes
-                # Paper Eq.21: A_t^on = GAE(λ, γ; r_t, V_ψ)
-                self.policy.eval()
-                self.critics.eval()
-                gae_obs_features_all = []
-                gae_naction_all = []
-                gae_advantages_all = []
-                gae_returns_all = []
-
-                with torch.no_grad():
-                    for ep in online_episodes:
-                        states = torch.from_numpy(ep['state']).to(self.device)
-                        actions = torch.from_numpy(ep['action']).to(self.device)
-                        rewards = torch.from_numpy(ep['reward']).to(self.device)
-                        dones = torch.from_numpy(ep['done']).to(self.device)
-
-                        T_ep = len(states)
-                        if T_ep < 2:
-                            continue
-
-                        # Encode each step's observation features
-                        # (simplified: use state directly as agent_pos, need point_cloud too)
-                        # For GAE we need V(s_t) at each step
-                        # Since we can't easily reconstruct full obs_dict from stored data,
-                        # we use the critic's V on encoded features from stored data.
-                        # Build obs features from stored state (agent_pos part of obs_features)
-                        naction = self.policy.normalizer['action'].normalize(actions)
-
-                        # Approximate obs_features: encode stored observations
-                        pcs = torch.from_numpy(ep['point_cloud']).to(self.device)
-                        nobs_pc = self.policy.normalizer['point_cloud'].normalize(pcs)
-                        if not self.policy.use_pc_color:
-                            nobs_pc = nobs_pc[..., :3]
-                        nobs_state = self.policy.normalizer['agent_pos'].normalize(states)
-
-                        # Encode step-by-step (no n_obs_steps windowing for simplicity)
-                        obs_feats = []
-                        for t_step in range(T_ep):
-                            pc_t = nobs_pc[t_step:t_step+1]
-                            state_t = nobs_state[t_step:t_step+1]
-                            step_nobs = {'point_cloud': pc_t, 'agent_pos': state_t}
-                            feat = self.policy.obs_encoder(step_nobs)
-                            obs_feats.append(feat.reshape(1, -1))
-                        obs_feats = torch.cat(obs_feats, dim=0)  # [T, F]
-
-                        # Get V(s_t) for all steps
-                        values = self.critics.get_value(obs_feats).squeeze(-1)  # [T]
-
-                        # GAE computation
-                        advantages = torch.zeros(T_ep, device=self.device)
-                        returns = torch.zeros(T_ep, device=self.device)
-                        last_gae = 0.0
-                        for t_step in reversed(range(T_ep)):
-                            if t_step == T_ep - 1:
-                                next_val = 0.0
-                            else:
-                                next_val = values[t_step + 1].item()
-                            delta = rewards[t_step] + gamma_chunk * (1 - dones[t_step]) * next_val - values[t_step]
-                            last_gae = delta + gamma_chunk * gae_lambda * (1 - dones[t_step]) * last_gae
-                            advantages[t_step] = last_gae
-                            returns[t_step] = advantages[t_step] + values[t_step]
-
-                        gae_obs_features_all.append(obs_feats)
-                        gae_naction_all.append(naction)
-                        gae_advantages_all.append(advantages)
-                        gae_returns_all.append(returns)
-
-                if not gae_advantages_all:
-                    continue
-
-                # Concatenate all episode data
-                all_obs_feats = torch.cat(gae_obs_features_all, dim=0)
-                all_nactions = torch.cat(gae_naction_all, dim=0)
-                all_advantages = torch.cat(gae_advantages_all, dim=0)
-                all_returns = torch.cat(gae_returns_all, dim=0)
-
-                # Normalize advantages
-                all_advantages = (all_advantages - all_advantages.mean()) / (all_advantages.std() + 1e-8)
-
-                # 3. Update critics with online data (V loss from Eq.21)
-                self.critics.train()
-                N = all_obs_feats.shape[0]
-                bs = min(self.config.dataloader.batch_size, N)
-                for critic_epoch in range(5):
-                    perm = torch.randperm(N, device=self.device)
-                    for start in range(0, N, bs):
-                        idx = perm[start:start+bs]
-                        v_pred = self.critics.get_value(all_obs_feats[idx])
-                        v_loss = lambda_v * torch.nn.functional.mse_loss(v_pred.squeeze(-1), all_returns[idx])
-
-                        q_loss, _ = self.critics.compute_q_loss(
-                            all_obs_feats[idx], all_nactions[idx],
-                            all_returns[idx].unsqueeze(-1),
-                            all_obs_feats[torch.clamp(idx+1, max=N-1)],
-                            torch.zeros(len(idx), 1, device=self.device)
-                        )
-
-                        self.v_optimizer.zero_grad()
-                        v_loss.backward()
-                        self.v_optimizer.step()
-
-                        self.q_optimizer.zero_grad()
-                        q_loss.backward()
-                        self.q_optimizer.step()
-
-                        self.critics.update_target_network(tau=config.critics.target_update_tau)
-
-                # 4. Merge data and continue
+                # Keep the raw online episodes for bookkeeping / future analysis,
+                # but optimize the policy with the on-policy GAE objective.
                 current_dataset.merge_episodes(online_episodes)
 
-                # 5. Update policy with PPO using GAE advantages
-                # (re-use offline_rl_optimize on merged dataset — the GAE advantages
-                # have already updated the critics, so Q-V advantages will reflect online data)
+                # 2. Online PPO + GAE optimization (paper Eq.21).
                 _apply_vib_betas(0.1)
-                self.offline_rl_optimize(
-                    dataset=current_dataset,
+                self.online_rl_optimize(
+                    online_episodes=online_episodes,
                     num_epochs=min(20, config.training.ppo_epochs)
                 )
                 _apply_vib_betas(1.0)
@@ -1282,10 +1540,44 @@ class RL100Trainer:
 
         if self.ema_policy is not None:
             checkpoint['ema_policy'] = self.ema_policy.state_dict()
+            checkpoint['ema_helper'] = {
+                'decay': self.ema.decay,
+                'optimization_step': self.ema.optimization_step,
+            }
 
         save_path = os.path.join(save_dir, f'{tag}.ckpt')
         torch.save(checkpoint, save_path)
         cprint(f"[Checkpoint] Saved to {save_path}", "green")
+
+    def _load_matching_state_dict(self, module: nn.Module, state_dict: Dict[str, torch.Tensor], name: str):
+        current_state = module.state_dict()
+        filtered_state = {}
+        skipped = []
+        for key, value in state_dict.items():
+            if key in current_state and current_state[key].shape == value.shape:
+                filtered_state[key] = value
+            else:
+                skipped.append(key)
+
+        missing, unexpected = module.load_state_dict(filtered_state, strict=False)
+        if skipped:
+            cprint(
+                f"[Checkpoint] {name}: skipped {len(skipped)} incompatible key(s): "
+                f"{skipped[:3]}{'...' if len(skipped) > 3 else ''}",
+                "yellow",
+            )
+        if missing:
+            cprint(
+                f"[Checkpoint] {name}: {len(missing)} missing key(s): "
+                f"{missing[:3]}{'...' if len(missing) > 3 else ''}",
+                "yellow",
+            )
+        if unexpected:
+            cprint(
+                f"[Checkpoint] {name}: {len(unexpected)} unexpected key(s): "
+                f"{unexpected[:3]}{'...' if len(unexpected) > 3 else ''}",
+                "yellow",
+            )
 
     def load_checkpoint(self, path: str):
         """Load checkpoint."""
@@ -1303,17 +1595,41 @@ class RL100Trainer:
             cprint(f"[Checkpoint] policy: {len(unexpected)} unexpected key(s) "
                    f"(ignored): {unexpected[:3]}{'...' if len(unexpected)>3 else ''}", "yellow")
 
-        self.critics.load_state_dict(checkpoint['critics'])
-        self.consistency_model.load_state_dict(checkpoint['consistency_model'])
+        self._load_matching_state_dict(self.critics, checkpoint['critics'], 'critics')
+        self._load_matching_state_dict(self.consistency_model, checkpoint['consistency_model'], 'consistency_model')
         if 'transition_model' in checkpoint:
-            self.transition_model.load_state_dict(checkpoint['transition_model'])
-        self.policy_optimizer.load_state_dict(checkpoint['policy_optimizer'])
-        self.v_optimizer.load_state_dict(checkpoint['v_optimizer'])
-        self.q_optimizer.load_state_dict(checkpoint['q_optimizer'])
-        self.consistency_optimizer.load_state_dict(checkpoint['consistency_optimizer'])
+            try:
+                self.transition_model.load_state_dict(checkpoint['transition_model'])
+            except Exception as e:
+                cprint(f"[Checkpoint] transition_model full restore failed ({type(e).__name__}: {e}); trying partial model restore.", "yellow")
+                if isinstance(checkpoint['transition_model'], dict) and 'model' in checkpoint['transition_model']:
+                    self._load_matching_state_dict(
+                        self.transition_model.model,
+                        checkpoint['transition_model']['model'],
+                        'transition_model.model'
+                    )
+        try:
+            self.policy_optimizer.load_state_dict(checkpoint['policy_optimizer'])
+        except Exception as e:
+            cprint(f"[Checkpoint] policy_optimizer not restored ({type(e).__name__}: {e})", "yellow")
+        try:
+            self.v_optimizer.load_state_dict(checkpoint['v_optimizer'])
+        except Exception as e:
+            cprint(f"[Checkpoint] v_optimizer not restored ({type(e).__name__}: {e})", "yellow")
+        try:
+            self.q_optimizer.load_state_dict(checkpoint['q_optimizer'])
+        except Exception as e:
+            cprint(f"[Checkpoint] q_optimizer not restored ({type(e).__name__}: {e})", "yellow")
+        try:
+            self.consistency_optimizer.load_state_dict(checkpoint['consistency_optimizer'])
+        except Exception as e:
+            cprint(f"[Checkpoint] consistency_optimizer not restored ({type(e).__name__}: {e})", "yellow")
 
         if 'ema_policy' in checkpoint and self.ema_policy is not None:
             self.ema_policy.load_state_dict(checkpoint['ema_policy'], strict=False)
+        if 'ema_helper' in checkpoint and self.ema_policy is not None and hasattr(self, 'ema'):
+            self.ema.decay = checkpoint['ema_helper'].get('decay', self.ema.decay)
+            self.ema.optimization_step = checkpoint['ema_helper'].get('optimization_step', self.ema.optimization_step)
 
         self.global_step = checkpoint['global_step']
         self.epoch = checkpoint['epoch']

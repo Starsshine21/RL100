@@ -134,7 +134,8 @@ class MetaworldRunner(BaseRunner):
         return log_data
 
     def run_and_collect(self, policy: BasePolicy, num_episodes: int,
-                        reward_type: str = 'sparse'):
+                        reward_type: str = 'sparse',
+                        gamma: float = 0.99):
         """
         Roll out policy and collect trajectory data for dataset merging.
 
@@ -147,9 +148,12 @@ class MetaworldRunner(BaseRunner):
             episodes : list of per-episode dicts (numpy arrays)
         """
         device = policy.device
-        env = self.env
+        # Unwrap MultiStepWrapper for single-step transitions; we will
+        # execute the action chunk manually to keep replay data per-step.
+        env = self.env.env
 
-        all_traj_rewards = []
+        all_env_rewards = []
+        all_rl_rewards = []
         all_success_rates = []
         collected_episodes = []
 
@@ -163,49 +167,134 @@ class MetaworldRunner(BaseRunner):
             policy.reset()
 
             done = False
-            traj_reward = 0
+            traj_env_reward = 0
             is_success = False
 
             ep_state, ep_action, ep_pc, ep_reward, ep_done = [], [], [], [], []
+            decision_steps = []
 
-            while not done:
-                np_obs_dict = dict(obs)
+            # Maintain a rolling window of observations for policy input.
+            obs_queue = collections.deque(maxlen=self.n_obs_steps)
+            init_obs = {
+                'agent_pos': obs['agent_pos'].copy(),
+                'point_cloud': obs['point_cloud'].copy(),
+            }
+            for _ in range(self.n_obs_steps):
+                obs_queue.append(init_obs)
 
-                cur_state = np_obs_dict['agent_pos'][-1]
-                cur_pc    = np_obs_dict['point_cloud'][-1]
-
+            step_count = 0
+            while not done and step_count < self.max_steps:
+                # Build stacked obs for the policy: [n_obs_steps, ...]
+                pc_stack = np.stack([o['point_cloud'] for o in obs_queue], axis=0)
+                state_stack = np.stack([o['agent_pos'] for o in obs_queue], axis=0)
                 obs_dict_input = {
-                    'point_cloud': torch.from_numpy(np_obs_dict['point_cloud']).unsqueeze(0).to(device),
-                    'agent_pos':   torch.from_numpy(np_obs_dict['agent_pos']).unsqueeze(0).to(device),
+                    'point_cloud': torch.from_numpy(pc_stack).unsqueeze(0).to(device),
+                    'agent_pos':   torch.from_numpy(state_stack).unsqueeze(0).to(device),
                 }
 
                 with torch.no_grad():
-                    action_dict = policy.predict_action(obs_dict_input)
+                    if hasattr(policy, 'predict_action_with_trajectory'):
+                        action_dict = policy.predict_action_with_trajectory(obs_dict_input)
+                    else:
+                        action_dict = policy.predict_action(obs_dict_input)
 
                 np_action = action_dict['action'].squeeze(0).detach().cpu().numpy()
-                first_action = np_action[0]
+                chunk_step_rewards = []
+                chunk_done = False
+                decision_obs = {
+                    'point_cloud': pc_stack.astype(np.float32),
+                    'agent_pos': state_stack.astype(np.float32),
+                }
+                trajectory = None
+                log_probs_old = None
+                if 'trajectory' in action_dict and 'log_probs_old' in action_dict:
+                    trajectory = np.stack(
+                        [traj.squeeze(0).detach().cpu().numpy().astype(np.float32)
+                         for traj in action_dict['trajectory']],
+                        axis=0,
+                    )
+                    log_probs_old = np.stack(
+                        [log_prob.squeeze(0).detach().cpu().numpy().astype(np.float32)
+                         for log_prob in action_dict['log_probs_old']],
+                        axis=0,
+                    )
 
-                obs, reward, done, info = env.step(np_action)
+                # Execute the chunk open-loop but record per-step transitions.
+                for act in np_action:
+                    if done or step_count >= self.max_steps:
+                        break
 
-                traj_reward += reward
-                done = bool(np.all(done))
-                is_success = is_success or bool(max(info['success']))
+                    cur_state = obs['agent_pos']
+                    cur_pc = obs['point_cloud']
 
-                ep_state.append(cur_state.astype(np.float32))
-                ep_action.append(first_action.astype(np.float32))
-                ep_pc.append(cur_pc.astype(np.float32))
-                if reward_type == 'dense':
-                    ep_reward.append(np.float32(reward))
-                else:
-                    ep_reward.append(np.float32(0.0))
-                ep_done.append(np.float32(done))
+                    obs, reward, done, info = env.step(act)
+                    reward = float(reward)
+                    done = bool(np.all(done))
+                    chunk_done = chunk_done or done
+
+                    traj_env_reward += reward
+                    if isinstance(info, dict) and 'success' in info:
+                        try:
+                            is_success = is_success or bool(max(info['success']))
+                        except Exception:
+                            is_success = is_success or bool(info['success'])
+
+                    ep_state.append(cur_state.astype(np.float32))
+                    ep_action.append(act.astype(np.float32))
+                    ep_pc.append(cur_pc.astype(np.float32))
+                    if reward_type == 'dense':
+                        ep_reward.append(np.float32(reward))
+                        chunk_step_rewards.append(np.float32(reward))
+                    else:
+                        ep_reward.append(np.float32(0.0))
+                        chunk_step_rewards.append(np.float32(0.0))
+                    ep_done.append(np.float32(done))
+
+                    obs_queue.append({
+                        'agent_pos': obs['agent_pos'].copy(),
+                        'point_cloud': obs['point_cloud'].copy(),
+                    })
+                    step_count += 1
+                    if step_count >= self.max_steps and not done:
+                        done = True
+                        chunk_done = True
+                        ep_done[-1] = np.float32(1.0)
+
+                if reward_type == 'sparse' and chunk_done and is_success and chunk_step_rewards:
+                    chunk_step_rewards[-1] = np.float32(1.0)
+
+                if np_action.shape[0] > 0:
+                    next_pc_stack = np.stack([o['point_cloud'] for o in obs_queue], axis=0).astype(np.float32)
+                    next_state_stack = np.stack([o['agent_pos'] for o in obs_queue], axis=0).astype(np.float32)
+                    chunk_discount = np.array(
+                        [gamma ** j for j in range(len(chunk_step_rewards))],
+                        dtype=np.float32,
+                    )
+                    decision_reward = float(np.dot(chunk_discount, np.asarray(chunk_step_rewards, dtype=np.float32)))
+                    decision_step = {
+                        'obs': decision_obs,
+                        'action': np_action.astype(np.float32),
+                        'reward': np.float32(decision_reward),
+                        'done': np.float32(chunk_done),
+                        'next_obs': {
+                            'point_cloud': next_pc_stack,
+                            'agent_pos': next_state_stack,
+                        },
+                    }
+                    if trajectory is not None and log_probs_old is not None:
+                        decision_step['trajectory'] = trajectory
+                        decision_step['log_probs_old'] = log_probs_old
+                    decision_steps.append(decision_step)
 
             # Sparse: 1 at last step only if successful
             if reward_type == 'sparse' and is_success and len(ep_reward) > 0:
                 ep_reward[-1] = np.float32(1.0)
 
+            traj_rl_reward = float(np.sum(ep_reward)) if len(ep_reward) > 0 else 0.0
+
             all_success_rates.append(is_success)
-            all_traj_rewards.append(traj_reward)
+            all_env_rewards.append(traj_env_reward)
+            all_rl_rewards.append(traj_rl_reward)
 
             if len(ep_state) > 0:
                 collected_episodes.append({
@@ -214,10 +303,14 @@ class MetaworldRunner(BaseRunner):
                     'point_cloud': np.stack(ep_pc,     axis=0),
                     'reward':      np.array(ep_reward, dtype=np.float32),
                     'done':        np.array(ep_done,   dtype=np.float32),
+                    'success':     bool(is_success),
+                    'decision_steps': decision_steps,
                 })
 
         metrics = {
-            'mean_traj_rewards':  float(np.mean(all_traj_rewards)),
+            'mean_traj_rewards':  float(np.mean(all_env_rewards)),
+            'mean_env_rewards':   float(np.mean(all_env_rewards)),
+            'mean_rl_rewards':    float(np.mean(all_rl_rewards)),
             'mean_success_rates': float(np.mean(all_success_rates)),
             'test_mean_score':    float(np.mean(all_success_rates)),
             'n_episodes':         len(collected_episodes),
@@ -226,6 +319,8 @@ class MetaworldRunner(BaseRunner):
 
         cprint(f"[Collect] {len(collected_episodes)} episodes, "
                f"success={metrics['mean_success_rates']:.3f}, "
+               f"env_return={metrics['mean_env_rewards']:.2f}, "
+               f"rl_reward={metrics['mean_rl_rewards']:.2f}, "
                f"steps={metrics['n_steps']}", 'cyan')
 
         _ = env.reset()

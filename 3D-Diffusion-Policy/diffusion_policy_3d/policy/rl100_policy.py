@@ -29,7 +29,7 @@ References:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 import copy
 from diffusion_policy_3d.policy.dp3 import DP3
 from diffusion_policy_3d.model.common.normalizer import LinearNormalizer
@@ -120,6 +120,66 @@ class RL100Policy(DP3):
         self.sigma_max = sigma_max
         self.use_variance_clip = use_variance_clip
 
+    def encode_obs_global_cond(self, obs_dict: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """
+        Encode observations once into the conditioning tensor consumed by the
+        diffusion UNet. This can be cached across PPO sub-steps.
+        """
+        batch_size = next(iter(obs_dict.values())).shape[0]
+        nobs = self.normalizer.normalize(obs_dict)
+        if not self.use_pc_color:
+            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
+
+        this_nobs = dict_apply(
+            nobs,
+            lambda x: x[:, :self.n_obs_steps, ...].reshape(-1, *x.shape[2:])
+        )
+        nobs_features = self.obs_encoder(this_nobs)
+        if "cross_attention" in self.condition_type:
+            return nobs_features.reshape(batch_size, self.n_obs_steps, -1)
+        return nobs_features.reshape(batch_size, -1)
+
+    def compute_obs_regularization(self, obs_dict: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, float]]:
+        """
+        Compute the Recon/VIB regularization term for RL fine-tuning.
+
+        This mirrors the observation-encoder branch used in BC/IL loss, but
+        returns only the weighted regularizer so it can be added to PPO.
+        """
+        device = next(self.model.parameters()).device
+        zero = torch.zeros((), device=device)
+        zero_info = {
+            'kl_loss': 0.0,
+            'recon_loss': 0.0,
+            'recon_loss_pc': 0.0,
+            'recon_loss_state': 0.0,
+            'total_reg_loss': 0.0,
+        }
+        if not self.use_recon_vib:
+            return zero, zero_info
+
+        nobs = self.normalizer.normalize(obs_dict)
+        if not self.use_pc_color:
+            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
+
+        this_nobs = dict_apply(
+            nobs,
+            lambda x: x[:, :self.n_obs_steps, ...].reshape(-1, *x.shape[2:])
+        )
+        _, reg_loss_dict = self.obs_encoder(this_nobs, return_reg_loss=True)
+        reg_loss = reg_loss_dict.get('total_reg_loss', zero)
+        if isinstance(reg_loss, torch.Tensor) and reg_loss.dim() > 0:
+            reg_loss = reg_loss.mean()
+
+        info = {
+            'kl_loss': float(reg_loss_dict.get('kl_loss', 0.0)),
+            'recon_loss': float(reg_loss_dict.get('recon_loss', 0.0)),
+            'recon_loss_pc': float(reg_loss_dict.get('recon_loss_pc', 0.0)),
+            'recon_loss_state': float(reg_loss_dict.get('recon_loss_state', 0.0)),
+            'total_reg_loss': float(reg_loss.item() if isinstance(reg_loss, torch.Tensor) else reg_loss),
+        }
+        return reg_loss, info
+
     def get_variance_at_timestep(
         self,
         timestep: torch.Tensor,
@@ -160,10 +220,14 @@ class RL100Policy(DP3):
 
         # DDIM variance: σ² = (1 - ᾱ_{t_prev}) / (1 - ᾱ_t) * (1 - ᾱ_t / ᾱ_{t_prev})
         variance = (1 - alpha_t_prev) / (1 - alpha_t) * (1 - alpha_t / alpha_t_prev)
+        final_step_mask = prev_timestep < 0
 
         # Paper Eq.23: clip variance to control exploration
         if self.use_variance_clip:
-            variance = torch.clamp(variance, self.sigma_min ** 2, self.sigma_max ** 2)
+            clipped_variance = torch.clamp(variance, self.sigma_min ** 2, self.sigma_max ** 2)
+            variance = torch.where(final_step_mask, torch.zeros_like(clipped_variance), clipped_variance)
+        else:
+            variance = torch.where(final_step_mask, torch.zeros_like(variance), variance)
 
         return variance
 
@@ -239,11 +303,18 @@ class RL100Policy(DP3):
         if isinstance(t, int):
             t_tensor = torch.tensor([t], device=x_t.device).expand(x_t.shape[0])
         else:
-            t_tensor = t
+            t_tensor = t.to(x_t.device)
+            if t_tensor.dim() == 0:
+                t_tensor = t_tensor.expand(x_t.shape[0])
         if isinstance(t_prev, int):
             t_prev_tensor = torch.tensor([t_prev], device=x_t.device).expand(x_t.shape[0])
         else:
-            t_prev_tensor = t_prev
+            t_prev_tensor = t_prev.to(x_t.device)
+            if t_prev_tensor.dim() == 0:
+                t_prev_tensor = t_prev_tensor.expand(x_t.shape[0])
+
+        t_tensor = t_tensor.long()
+        t_prev_tensor = t_prev_tensor.long()
 
         alpha_t = alphas_cumprod[t_tensor].view(-1, 1, 1)
 
@@ -275,8 +346,12 @@ class RL100Policy(DP3):
             mean + torch.sqrt(variance).view(-1, 1, 1) * noise
         )
 
-        # Compute log probability
-        log_prob = self.compute_gaussian_log_prob(x_t_prev, mean, variance)
+        # The final DDIM step is deterministic (σ² = 0), so it does not define a
+        # valid Gaussian likelihood for PPO ratio computation.
+        if torch.all(t_prev_tensor < 0):
+            log_prob = torch.zeros(x_t.shape[0], device=x_t.device, dtype=x_t.dtype)
+        else:
+            log_prob = self.compute_gaussian_log_prob(x_t_prev, mean, variance)
 
         if return_mean:
             return x_t_prev, log_prob, mean
@@ -359,10 +434,11 @@ class RL100Policy(DP3):
 
     def compute_ppo_loss(
         self,
-        obs_dict: Dict[str, torch.Tensor],
+        obs_dict: Optional[Dict[str, torch.Tensor]],
         old_log_probs: List[torch.Tensor],
         advantages: torch.Tensor,
-        trajectory: List[torch.Tensor]
+        trajectory: List[torch.Tensor],
+        global_cond: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Dict]:
         """
         Compute RL-100's K-step PPO loss.
@@ -376,6 +452,7 @@ class RL100Policy(DP3):
             old_log_probs: List of [B] old log probs for each of K steps
             advantages: [B, 1] advantage values A(s, a)
             trajectory: List of [B, T, D] actions at each timestep (length K+1)
+            global_cond: Optional cached conditioning tensor
 
         Returns:
             loss: scalar PPO loss
@@ -383,21 +460,13 @@ class RL100Policy(DP3):
         """
         device = next(self.model.parameters()).device
         batch_size = advantages.shape[0]
+        if global_cond is None:
+            if obs_dict is None:
+                raise ValueError("compute_ppo_loss requires obs_dict when global_cond is not provided.")
+            global_cond = self.encode_obs_global_cond(obs_dict)
 
-        # Normalize observations
-        nobs = self.normalizer.normalize(obs_dict)
-        if not self.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-
-        # Encode observations
-        this_nobs = dict_apply(
-            nobs,
-            lambda x: x[:, :self.n_obs_steps, ...].reshape(-1, *x.shape[2:])
-        )
-        nobs_features = self.obs_encoder(this_nobs)
-        global_cond = nobs_features.reshape(batch_size, -1)
-
-        # Compute new log probs for each denoising step
+        # Compute new log probs for each stochastic denoising step. The final
+        # deterministic step is excluded from the PPO likelihood ratio.
         new_log_probs = []
         scheduler = self.noise_scheduler
         scheduler.set_timesteps(self.num_inference_steps)
@@ -414,15 +483,18 @@ class RL100Policy(DP3):
             else:
                 t_prev = torch.tensor(-1, device=device)
 
+            t_tensor = torch.tensor([t], device=device).expand(batch_size)
+            t_prev_tensor = torch.tensor([t_prev], device=device).expand(batch_size)
+
+            if torch.all(t_prev_tensor < 0):
+                continue
+
             # Predict noise
             noise_pred = self.model(
                 sample=x_t,
                 timestep=t,
                 global_cond=global_cond
             )
-
-            t_tensor = torch.tensor([t], device=device).expand(batch_size)
-            t_prev_tensor = torch.tensor([t_prev], device=device).expand(batch_size)
 
             alpha_t = alphas_cumprod[t_tensor].view(-1, 1, 1)
             alpha_t_prev = torch.where(
@@ -444,15 +516,15 @@ class RL100Policy(DP3):
 
             # Log prob of actual transition
             log_prob = self.compute_gaussian_log_prob(x_t_prev, mean, variance)
-            new_log_probs.append(log_prob)
+            new_log_probs.append((i, log_prob))
 
         # Compute PPO loss for each step
         ppo_losses = []
         ratios = []
 
-        for k in range(len(scheduler.timesteps)):
+        for k, log_prob_new in new_log_probs:
             # Probability ratio
-            ratio = torch.exp(new_log_probs[k] - old_log_probs[k])
+            ratio = torch.exp(log_prob_new - old_log_probs[k])
             ratios.append(ratio.mean().item())
 
             # Clipped ratio
@@ -487,7 +559,8 @@ class RL100Policy(DP3):
 
     def sample_for_ppo(
         self,
-        obs_dict: Dict[str, torch.Tensor],
+        obs_dict: Optional[Dict[str, torch.Tensor]] = None,
+        global_cond: Optional[torch.Tensor] = None,
     ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
         """
         Sample denoising trajectory for PPO training.
@@ -500,19 +573,17 @@ class RL100Policy(DP3):
             log_probs_old: List of [B] tensors (K entries)
         """
         device = next(self.model.parameters()).device
-        batch_size = next(iter(obs_dict.values())).shape[0]
+        if global_cond is None:
+            if obs_dict is None:
+                raise ValueError("sample_for_ppo requires obs_dict when global_cond is not provided.")
+            global_cond = self.encode_obs_global_cond(obs_dict)
+        batch_size = global_cond.shape[0]
 
-        nobs = self.normalizer.normalize(obs_dict)
-        if not self.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-        this_nobs = dict_apply(
-            nobs,
-            lambda x: x[:, :self.n_obs_steps, ...].reshape(-1, *x.shape[2:])
+        cond_data = torch.zeros(
+            (batch_size, self.horizon, self.action_dim),
+            device=device,
+            dtype=global_cond.dtype,
         )
-        nobs_features = self.obs_encoder(this_nobs)
-        global_cond = nobs_features.reshape(batch_size, -1)
-
-        cond_data = torch.zeros((batch_size, self.horizon, self.action_dim), device=device)
         cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
 
         with torch.no_grad():
@@ -524,6 +595,55 @@ class RL100Policy(DP3):
             )
 
         return trajectory, log_probs_old
+
+    def sample_for_ppo_from_global_cond(
+        self,
+        global_cond: torch.Tensor,
+    ) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor]]:
+        device = global_cond.device
+        batch_size = global_cond.shape[0]
+        cond_data = torch.zeros((batch_size, self.horizon, self.action_dim), device=device, dtype=global_cond.dtype)
+        cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
+
+        with torch.no_grad():
+            nsample, trajectory, log_probs_old = self.conditional_sample_with_trajectory(
+                condition_data=cond_data,
+                condition_mask=cond_mask,
+                global_cond=global_cond,
+                return_trajectory=True
+            )
+
+        return nsample, trajectory, log_probs_old
+
+    def predict_action_with_trajectory(
+        self,
+        obs_dict: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+        device = next(self.model.parameters()).device
+        batch_size = next(iter(obs_dict.values())).shape[0]
+
+        nobs = self.normalizer.normalize(obs_dict)
+        if not self.use_pc_color:
+            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
+
+        this_nobs = dict_apply(
+            nobs,
+            lambda x: x[:, :self.n_obs_steps, ...].reshape(-1, *x.shape[2:])
+        )
+        nobs_features = self.obs_encoder(this_nobs)
+        global_cond = nobs_features.reshape(batch_size, -1)
+
+        nsample, trajectory, log_probs_old = self.sample_for_ppo_from_global_cond(global_cond)
+        naction_pred = nsample[..., :self.action_dim]
+        action_pred = self.normalizer['action'].unnormalize(naction_pred)
+        action = self.extract_action_chunk(action_pred)
+
+        return {
+            'action': action,
+            'action_pred': action_pred,
+            'trajectory': trajectory,
+            'log_probs_old': log_probs_old,
+        }
 
     def compute_rl_loss(
         self,
@@ -548,18 +668,7 @@ class RL100Policy(DP3):
         horizon = self.horizon
         action_dim = self.action_dim
 
-        # Normalize observations
-        nobs = self.normalizer.normalize(obs_dict)
-        if not self.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-
-        # Encode observations
-        this_nobs = dict_apply(
-            nobs,
-            lambda x: x[:, :self.n_obs_steps, ...].reshape(-1, *x.shape[2:])
-        )
-        nobs_features = self.obs_encoder(this_nobs)
-        global_cond = nobs_features.reshape(batch_size, -1)
+        global_cond = self.encode_obs_global_cond(obs_dict)
 
         # Sample trajectory with old policy (for computing old log probs)
         with torch.no_grad():
@@ -575,10 +684,11 @@ class RL100Policy(DP3):
 
         # Compute PPO loss with new policy
         ppo_loss, ppo_info = self.compute_ppo_loss(
-            obs_dict=obs_dict,
+            obs_dict=None,
             old_log_probs=log_probs_old,
             advantages=advantages,
-            trajectory=trajectory_old
+            trajectory=trajectory_old,
+            global_cond=global_cond
         )
 
         return ppo_loss, ppo_info

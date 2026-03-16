@@ -86,7 +86,7 @@ critics:
   tau: 0.7                       # Expectile parameter τ for V network
   target_update_tau: 0.005       # Soft update coefficient for target V
   reward_scale: 1.0             # Divide chunk reward by this before Q training.
-  reward_type: sparse            # "sparse": reward=1 at last step only; "dense": use env shaped reward
+  reward_type: sparse            # "dense" requires datasets/rollouts with real reward labels; unlabeled demos can only be auto-relabeled in sparse mode
 
 # ============================================
 # Optimizers
@@ -152,18 +152,18 @@ training:
   retrain_il_after_collection: true  # Whether to retrain IL after collecting data
 
   # Phase 2: Offline RL
-  num_offline_iterations: 5          # M iterations of offline RL loop
-  critic_epochs: 50                  # With reward_scale=10 Q_loss converges by epoch 30-35;
+  num_offline_iterations: 10          # M iterations of offline RL loop
+  critic_epochs: 40                  # With reward_scale=10 Q_loss converges by epoch 30-35;
                                      # training beyond that causes bootstrapping drift (Q 40x overestimated)
-  ppo_epochs: 100                    # Epochs to optimize policy with PPO
-  ppo_inner_steps: 4                 # Inner PPO gradient steps per batch (keep ratio != 1)
-  collection_episodes: 50            # Episodes to collect per iteration
+  ppo_epochs: 30                    # Epochs to optimize policy with PPO
+  ppo_inner_steps: 1                 # Inner PPO gradient steps per batch (keep ratio != 1)
+  collection_episodes: 20            # Episodes to collect per iteration
   cd_every: 5                        # Consistency distillation frequency (steps)
   lambda_cd: 1.0                     # Paper Eq.22: L_total = L_RL + λ_CD·L_CD
   rl_policy_lr: 1.0e-5              # Policy LR during RL phase (10x smaller than IL per tag3)
 
   # Phase 3: Online RL
-  run_online_rl: false               # Whether to run online RL fine-tuning
+  run_online_rl: true               # Whether to run online RL fine-tuning
   online_rl_iterations: 10           # Number of online RL iterations
   online_collection_episodes: 20     # Episodes per online iteration
   lambda_v: 0.5                      # Value loss weight (paper Eq.21)
@@ -181,6 +181,18 @@ training:
   # Resume
   resume: true
   resume_path: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/after_il.ckpt
+
+# ============================================
+# Runtime Policy Selection
+# ============================================
+runtime:
+  collection_policy: ddim            # Rollout policy for offline data expansion: ddim or cm
+  collection_use_ema: false          # Use the current policy π_θ for rollout / OPE alignment
+  merge_success_only: true           # Only merge successful rollout episodes back into the replay dataset
+  final_eval_policies: [ddim, cm]    # Evaluate both deployment heads by default
+  final_eval_use_ema: true          # Final eval defaults to current policy unless explicitly overridden
+  eval_policy_mode: ddim             # eval_rl100.py default checkpoint policy mode
+  eval_use_ema: true                # eval_rl100.py defaults to policy weights unless explicitly overridden
 
 # ============================================
 # Checkpoint Configuration

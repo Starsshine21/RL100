@@ -35,6 +35,9 @@ class MetaworldDataset(BaseDataset):
 
         self.replay_buffer = ReplayBuffer.copy_from_path(
             zarr_path, keys=keys_to_load)
+        self.seed = seed
+        self.val_ratio = val_ratio
+        self.max_train_episodes = max_train_episodes
         val_mask = get_val_mask(
             n_episodes=self.replay_buffer.n_episodes, 
             val_ratio=val_ratio,
@@ -44,20 +47,36 @@ class MetaworldDataset(BaseDataset):
             mask=train_mask, 
             max_n=max_train_episodes, 
             seed=seed)
+        self.val_mask = np.asarray(val_mask, dtype=bool)
 
-        self.sampler = SequenceSampler(
-            replay_buffer=self.replay_buffer, 
-            sequence_length=horizon,
-            pad_before=pad_before, 
-            pad_after=pad_after,
-            episode_mask=train_mask)
-        self.train_mask = train_mask
         self.horizon = horizon
         self.pad_before = pad_before
         self.pad_after = pad_after
         self.n_action_steps = n_action_steps
         self.gamma = gamma
+        self.action_chunk_start = pad_before
+        self.action_chunk_end = self.action_chunk_start + n_action_steps
+        self._rebuild_sampler(train_mask)
+        self._refresh_episode_boundaries()
         self._shape_mismatch_warned = False
+
+    def _refresh_episode_boundaries(self):
+        self.episode_ends = self.replay_buffer.episode_ends[:]
+        if len(self.episode_ends) == 0:
+            self.episode_starts = np.zeros((0,), dtype=np.int64)
+        else:
+            self.episode_starts = np.concatenate([[0], self.episode_ends[:-1]]).astype(np.int64, copy=False)
+
+    def _rebuild_sampler(self, episode_mask: np.ndarray):
+        episode_mask = np.asarray(episode_mask, dtype=bool)
+        self.sampler = SequenceSampler(
+            replay_buffer=self.replay_buffer,
+            sequence_length=self.horizon,
+            pad_before=self.pad_before,
+            pad_after=self.pad_after,
+            episode_mask=episode_mask,
+        )
+        self.train_mask = episode_mask
 
     @staticmethod
     def _align_point_cloud_shape(point_cloud: np.ndarray, target_shape: tuple) -> np.ndarray:
@@ -95,14 +114,16 @@ class MetaworldDataset(BaseDataset):
 
     def get_validation_dataset(self):
         val_set = copy.copy(self)
+        episode_mask = np.asarray(getattr(self, 'val_mask', np.zeros(self.replay_buffer.n_episodes, dtype=bool)), dtype=bool)
         val_set.sampler = SequenceSampler(
             replay_buffer=self.replay_buffer, 
             sequence_length=self.horizon,
             pad_before=self.pad_before, 
             pad_after=self.pad_after,
-            episode_mask=~self.train_mask
+            episode_mask=episode_mask
             )
-        val_set.train_mask = ~self.train_mask
+        val_set.train_mask = episode_mask
+        val_set.val_mask = episode_mask
         return val_set
 
     def get_normalizer(self, mode='limits', **kwargs):
@@ -130,6 +151,37 @@ class MetaworldDataset(BaseDataset):
             'action': sample['action'].astype(np.float32)
         }
         return data
+
+    def _build_obs_window(self, decision_start_idx: int, episode_start: int, episode_end: int):
+        """
+        Build a horizon-length observation sequence whose first n_obs_steps align
+        with the decision state at ``decision_start_idx``.
+        """
+        desired_start = decision_start_idx - self.pad_before
+        desired_end = desired_start + self.horizon
+
+        buffer_start = max(desired_start, episode_start)
+        buffer_end = min(desired_end, episode_end)
+        sample_start_idx = buffer_start - desired_start
+        sample_end_idx = sample_start_idx + (buffer_end - buffer_start)
+
+        state_sample = self.replay_buffer['state'][buffer_start:buffer_end].astype(np.float32)
+        pc_sample = self.replay_buffer['point_cloud'][buffer_start:buffer_end].astype(np.float32)
+
+        next_state = np.zeros((self.horizon,) + state_sample.shape[1:], dtype=np.float32)
+        next_pc = np.zeros((self.horizon,) + pc_sample.shape[1:], dtype=np.float32)
+
+        if sample_start_idx > 0:
+            next_state[:sample_start_idx] = state_sample[0]
+            next_pc[:sample_start_idx] = pc_sample[0]
+        if sample_end_idx < self.horizon:
+            next_state[sample_end_idx:] = state_sample[-1]
+            next_pc[sample_end_idx:] = pc_sample[-1]
+
+        next_state[sample_start_idx:sample_end_idx] = state_sample
+        next_pc[sample_start_idx:sample_end_idx] = pc_sample
+
+        return next_state, next_pc
     
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         sample = self.sampler.sample_sequence(idx)
@@ -137,33 +189,36 @@ class MetaworldDataset(BaseDataset):
 
         if self.has_rl_data:
             nc = self.n_action_steps
-            # Paper: R_chunk = Σ_{j=0}^{n_c-1} γ^j · R_{t+j}
-            # Accumulate discounted reward over the action-chunk window.
-            raw_rewards = sample['reward'][:nc].astype(np.float32)  # (nc,)
-            discount = np.array([self.gamma ** j for j in range(nc)], dtype=np.float32)
+            chunk_start = self.action_chunk_start
+            buffer_start_idx, _, sample_start_idx, _ = self.sampler.indices[idx]
+            decision_start_idx = buffer_start_idx + (chunk_start - sample_start_idx)
+            decision_start_idx = max(int(decision_start_idx), 0)
+
+            episode_idx = int(np.searchsorted(self.episode_ends, decision_start_idx, side='right'))
+            episode_idx = min(max(episode_idx, 0), len(self.episode_ends) - 1)
+            episode_start = int(self.episode_starts[episode_idx])
+            episode_end = int(self.episode_ends[episode_idx])
+            decision_start_idx = min(max(decision_start_idx, episode_start), episode_end - 1)
+
+            # Paper: R_chunk = Σ_{j=0}^{n_c-1} γ^j · R_{t+j}.
+            # Compute it from the REAL replay-buffer interval rather than the padded
+            # sampled sequence; otherwise the terminal reward is duplicated near the
+            # episode tail.
+            chunk_buffer_end = min(decision_start_idx + nc, episode_end)
+            raw_rewards = self.replay_buffer['reward'][decision_start_idx:chunk_buffer_end].astype(np.float32)
+            discount = np.array([self.gamma ** j for j in range(len(raw_rewards))], dtype=np.float32)
             chunk_reward = float(np.dot(discount, raw_rewards))
             data['reward'] = np.array(chunk_reward, dtype=np.float32)
 
-            # done = True if any step within the chunk is terminal
-            data['done'] = np.array(sample['done'][:nc].any(), dtype=np.float32)
+            raw_dones = self.replay_buffer['done'][decision_start_idx:chunk_buffer_end].astype(np.float32)
+            data['done'] = np.array(raw_dones.any() if len(raw_dones) > 0 else 0.0, dtype=np.float32)
 
-            # next_obs: the obs window starting n_action_steps ahead (chunk-level MDP)
-            buffer_start_idx, _, _, _ = self.sampler.indices[idx]
-            total_len = len(self.replay_buffer['state'])
-            next_idx = min(buffer_start_idx + nc, total_len - 1)
-            next_end_idx = min(next_idx + self.horizon, total_len)
-
-            next_state = self.replay_buffer['state'][next_idx:next_end_idx].astype(np.float32)
-            next_pc = self.replay_buffer['point_cloud'][next_idx:next_end_idx].astype(np.float32)
-
-            # Pad if we're near the end of the buffer
-            actual_len = len(next_state)
-            if actual_len < self.horizon:
-                pad_len = self.horizon - actual_len
-                next_state = np.concatenate(
-                    [next_state, np.tile(next_state[-1:], (pad_len,) + (1,) * (next_state.ndim - 1))], axis=0)
-                next_pc = np.concatenate(
-                    [next_pc, np.tile(next_pc[-1:], (pad_len,) + (1,) * (next_pc.ndim - 1))], axis=0)
+            next_decision_start_idx = min(decision_start_idx + nc, episode_end - 1)
+            next_state, next_pc = self._build_obs_window(
+                decision_start_idx=next_decision_start_idx,
+                episode_start=episode_start,
+                episode_end=episode_end,
+            )
 
             data['next_obs'] = {
                 'agent_pos': next_state,
@@ -193,6 +248,9 @@ class MetaworldDataset(BaseDataset):
             return 0
 
         n_new_steps = 0
+        n_old_episodes = int(self.replay_buffer.n_episodes)
+        old_train_mask = np.asarray(getattr(self, 'train_mask', np.ones(n_old_episodes, dtype=bool)), dtype=bool)
+        old_val_mask = np.asarray(getattr(self, 'val_mask', np.zeros(n_old_episodes, dtype=bool)), dtype=bool)
         target_state_shape = tuple(self.replay_buffer['state'].shape[1:])
         target_action_shape = tuple(self.replay_buffer['action'].shape[1:])
         target_pc_shape = tuple(self.replay_buffer['point_cloud'].shape[1:])
@@ -252,17 +310,26 @@ class MetaworldDataset(BaseDataset):
 
         # Flag that RL data is now present
         self.has_rl_data = True
+        self._refresh_episode_boundaries()
 
-        # Rebuild sampler to include all episodes (no episode cap after merging)
         n_total = self.replay_buffer.n_episodes
-        episode_mask = np.ones(n_total, dtype=bool)
-        self.sampler = SequenceSampler(
-            replay_buffer=self.replay_buffer,
-            sequence_length=self.horizon,
-            pad_before=self.pad_before,
-            pad_after=self.pad_after,
-            episode_mask=episode_mask,
-        )
-        self.train_mask = episode_mask
+        n_new_episodes = n_total - n_old_episodes
+        if len(old_train_mask) == n_old_episodes:
+            # Preserve the original train/val split and append newly collected
+            # episodes to the training set.
+            episode_mask = np.concatenate(
+                [old_train_mask, np.ones(n_new_episodes, dtype=bool)],
+                axis=0,
+            )
+        else:
+            episode_mask = np.ones(n_total, dtype=bool)
+        self._rebuild_sampler(episode_mask)
+        if len(old_val_mask) == n_old_episodes:
+            self.val_mask = np.concatenate(
+                [old_val_mask, np.zeros(n_new_episodes, dtype=bool)],
+                axis=0,
+            )
+        else:
+            self.val_mask = np.zeros(n_total, dtype=bool)
 
         return n_new_steps

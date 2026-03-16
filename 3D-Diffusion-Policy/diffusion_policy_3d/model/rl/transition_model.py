@@ -294,7 +294,7 @@ class TransitionModel:
                     k: v.to(self.device) if isinstance(v, torch.Tensor) else v
                     for k, v in batch['obs'].items()
                 }
-                action = batch['action'][:, 0, :].to(self.device)   # [B, Da]
+                action = policy.extract_action_chunk(batch['action'].to(self.device))
                 reward = batch.get('reward', None)
                 if reward is not None:
                     reward = reward.to(self.device)
@@ -303,7 +303,7 @@ class TransitionModel:
                 nobs = policy.normalizer.normalize(obs_dict)
                 if not policy.use_pc_color:
                     nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-                naction = policy.normalizer['action'].normalize(action)  # [B, Da]
+                naction = policy.normalizer['action'].normalize(action).reshape(action.shape[0], -1)
 
                 B = action.shape[0]
 
@@ -314,10 +314,17 @@ class TransitionModel:
                 )
                 obs_feat = policy.obs_encoder(cur_nobs).reshape(B, -1)  # [B, F]
 
-                # Next obs features  (steps 1 .. n_obs_steps)
+                # Next obs features from the chunk-level next state supplied by the dataset.
+                next_obs_raw = {
+                    k: v.to(self.device) if isinstance(v, torch.Tensor) else v
+                    for k, v in batch['next_obs'].items()
+                }
+                nxt_nobs = policy.normalizer.normalize(next_obs_raw)
+                if not policy.use_pc_color:
+                    nxt_nobs['point_cloud'] = nxt_nobs['point_cloud'][..., :3]
                 nxt_nobs = dict_apply(
-                    nobs,
-                    lambda x: x[:, 1:1 + policy.n_obs_steps].reshape(-1, *x.shape[2:])
+                    nxt_nobs,
+                    lambda x: x[:, :policy.n_obs_steps].reshape(-1, *x.shape[2:])
                 )
                 next_obs_feat = policy.obs_encoder(nxt_nobs).reshape(B, -1)  # [B, F]
 

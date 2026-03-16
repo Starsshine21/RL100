@@ -176,7 +176,8 @@ class ConsistencyDistillation:
 
     def compute_distillation_loss(
         self,
-        obs_dict: Dict[str, torch.Tensor]
+        obs_dict: Dict[str, torch.Tensor],
+        global_cond: Optional[torch.Tensor] = None,
     ) -> tuple:
         """
         Compute consistency distillation loss.
@@ -200,27 +201,33 @@ class ConsistencyDistillation:
         self.teacher_policy.eval()
 
         try:
-            # Normalize observations (using teacher's normalizer)
-            nobs = self.teacher_policy.normalizer.normalize(obs_dict)
+            if global_cond is None:
+                with torch.no_grad():
+                    if hasattr(self.teacher_policy, 'encode_obs_global_cond'):
+                        global_cond = self.teacher_policy.encode_obs_global_cond(obs_dict)
+                    else:
+                        # Normalize observations (using teacher's normalizer)
+                        nobs = self.teacher_policy.normalizer.normalize(obs_dict)
 
-            # Remove color if needed
-            if not self.teacher_policy.use_pc_color:
-                nobs['point_cloud'] = nobs['point_cloud'][..., :3]
+                        # Remove color if needed
+                        if not self.teacher_policy.use_pc_color:
+                            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
 
-            # Encode observations (shared encoder from teacher)
-            with torch.no_grad():
-                # Reshape for encoder
-                this_nobs = {}
-                for key, value in nobs.items():
-                    this_nobs[key] = value[:, :self.teacher_policy.n_obs_steps, ...].reshape(
-                        -1, *value.shape[2:]
-                    )
+                        this_nobs = {}
+                        for key, value in nobs.items():
+                            this_nobs[key] = value[:, :self.teacher_policy.n_obs_steps, ...].reshape(
+                                -1, *value.shape[2:]
+                            )
 
-                # Encode
-                nobs_features = self.teacher_policy.obs_encoder(this_nobs)
-
-                # Reshape to [B, obs_feature_dim * n_obs_steps]
-                global_cond = nobs_features.reshape(batch_size, -1)
+                        nobs_features = self.teacher_policy.obs_encoder(this_nobs)
+                        if "cross_attention" in getattr(self.teacher_policy, 'condition_type', ''):
+                            global_cond = nobs_features.reshape(batch_size, self.teacher_policy.n_obs_steps, -1)
+                        else:
+                            global_cond = nobs_features.reshape(batch_size, -1)
+            else:
+                # CD historically does not update the observation encoder, so
+                # keep cached conditions detached when they are provided.
+                global_cond = global_cond.detach()
 
             # Generate teacher output (K-step DDIM)
             with torch.no_grad():

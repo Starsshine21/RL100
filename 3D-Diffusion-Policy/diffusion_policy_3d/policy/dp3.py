@@ -145,6 +145,53 @@ class DP3(BasePolicy):
 
 
         print_params(self)
+
+    @property
+    def action_chunk_start(self) -> int:
+        return self.n_obs_steps - 1
+
+    @property
+    def action_chunk_end(self) -> int:
+        return self.action_chunk_start + self.n_action_steps
+
+    @property
+    def chunk_action_dim(self) -> int:
+        return self.action_dim * self.n_action_steps
+
+    def extract_action_chunk(self, action_trajectory):
+        return action_trajectory[:, self.action_chunk_start:self.action_chunk_end, ...]
+
+    def flatten_action_chunk(self, action_trajectory):
+        action_chunk = self.extract_action_chunk(action_trajectory)
+        return action_chunk.reshape(action_chunk.shape[0], -1)
+
+    def _sample_action_from_global_cond(self, global_cond):
+        batch_size = global_cond.shape[0]
+        device = global_cond.device
+        dtype = next(self.parameters()).dtype
+        cond_data = torch.zeros(
+            size=(batch_size, self.horizon, self.action_dim),
+            device=device,
+            dtype=dtype,
+        )
+        cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
+        nsample = self.conditional_sample(
+            cond_data,
+            cond_mask,
+            global_cond=global_cond,
+            **self.kwargs,
+        )
+        naction_pred = nsample[..., :self.action_dim]
+        action_pred = self.normalizer['action'].unnormalize(naction_pred)
+        action = self.extract_action_chunk(action_pred)
+        return {
+            'action': action,
+            'action_pred': action_pred,
+            'naction_pred': naction_pred,
+        }
+
+    def predict_action_from_global_cond(self, global_cond: torch.Tensor) -> Dict[str, torch.Tensor]:
+        return self._sample_action_from_global_cond(global_cond)
         
     # ========= inference  ============
     def conditional_sample(self, 
@@ -240,32 +287,25 @@ class DP3(BasePolicy):
             cond_data[:,:To,Da:] = nobs_features
             cond_mask[:,:To,Da:] = True
 
-        # run sampling
+        if self.obs_as_global_cond:
+            return self._sample_action_from_global_cond(global_cond)
+
+        # run sampling for inpainting-based conditioning
         nsample = self.conditional_sample(
-            cond_data, 
+            cond_data,
             cond_mask,
             local_cond=local_cond,
             global_cond=global_cond,
             **self.kwargs)
-        
-        # unnormalize prediction
-        naction_pred = nsample[...,:Da]
+
+        naction_pred = nsample[..., :Da]
         action_pred = self.normalizer['action'].unnormalize(naction_pred)
+        action = self.extract_action_chunk(action_pred)
 
-        # get action
-        start = To - 1
-        end = start + self.n_action_steps
-        action = action_pred[:,start:end]
-        
-        # get prediction
-
-
-        result = {
+        return {
             'action': action,
             'action_pred': action_pred,
         }
-        
-        return result
 
     # ========= training  ============
     def set_normalizer(self, normalizer: LinearNormalizer):
@@ -424,4 +464,3 @@ class DP3(BasePolicy):
         # print(f"t6-t5: {t6-t5:.3f}")
 
         return total_loss, loss_dict
-

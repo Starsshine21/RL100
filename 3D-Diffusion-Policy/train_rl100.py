@@ -74,6 +74,13 @@ def main(cfg: OmegaConf):
     seed = cfg.training.seed
     set_seed(seed)
     cprint(f"\n[Setup] Random seed: {seed}", "green")
+    if torch.cuda.is_available():
+        visible_gpus = torch.cuda.device_count()
+        if visible_gpus > 1:
+            cprint(
+                f"[Setup] {visible_gpus} CUDA devices are visible, but the current RL100 trainer runs on a single device ({cfg.training.device}).",
+                "yellow",
+            )
 
     # Get output directory
     output_dir = os.getcwd()  # Hydra changes cwd to output dir
@@ -94,7 +101,19 @@ def main(cfg: OmegaConf):
     # Load dataset
     cprint("\n[Setup] Loading dataset...", "cyan")
     dataset: BaseDataset = hydra.utils.instantiate(cfg.task.dataset)
-    cprint(f"[Setup] Dataset loaded: {len(dataset)} episodes", "green")
+    dataset_samples = len(dataset)
+    dataset_episodes = None
+    if hasattr(dataset, 'replay_buffer'):
+        try:
+            dataset_episodes = int(dataset.replay_buffer.n_episodes)
+        except Exception:
+            dataset_episodes = None
+    if dataset_episodes is not None:
+        cprint(f"[Setup] Dataset loaded: {dataset_samples} samples across {dataset_episodes} episodes", "green")
+    else:
+        cprint(f"[Setup] Dataset loaded: {dataset_samples} samples", "green")
+    if hasattr(dataset, 'has_rl_data'):
+        cprint(f"[Setup] Dataset has reward/done labels: {bool(dataset.has_rl_data)}", "green")
 
     dataset_num_points = None
     if hasattr(dataset, 'replay_buffer'):
@@ -154,23 +173,31 @@ def main(cfg: OmegaConf):
 
     # Final evaluation
     cprint("\n[Evaluation] Running final evaluation...", "cyan")
-    eval_policy = trainer.ema_policy if trainer.ema_policy else trainer.policy
-    eval_policy.eval()
-    with torch.no_grad():
-        try:
-            final_metrics = env_runner.run(eval_policy, num_episodes=50)
-        except TypeError:
-            final_metrics = env_runner.run(eval_policy)
+    final_eval_policies = list(getattr(cfg.runtime, 'final_eval_policies', ['ddim']))
+    final_eval_use_ema = bool(getattr(cfg.runtime, 'final_eval_use_ema', False))
+    final_results = {}
+    for policy_mode in final_eval_policies:
+        eval_policy = trainer.get_runtime_policy(mode=policy_mode, use_ema=final_eval_use_ema)
+        eval_policy.eval()
+        with torch.no_grad():
+            try:
+                metrics = env_runner.run(eval_policy, num_episodes=50)
+            except TypeError:
+                metrics = env_runner.run(eval_policy)
+        final_results[policy_mode] = metrics
 
     cprint("\n" + "="*80, "green")
     cprint(" "*25 + "FINAL RESULTS", "green")
     cprint("="*80, "green")
-    for key, value in final_metrics.items():
-        if isinstance(value, float):
-            cprint(f"{key}: {value:.4f}", "green")
+    for policy_mode, metrics in final_results.items():
+        cprint(f"[{policy_mode}]", "green")
+        for key, value in metrics.items():
+            if isinstance(value, float):
+                cprint(f"{key}: {value:.4f}", "green")
 
     if cfg.logging.use_wandb:
-        wandb.log({f'final/{k}': v for k, v in final_metrics.items()})
+        for policy_mode, metrics in final_results.items():
+            wandb.log({f'final/{policy_mode}/{k}': v for k, v in metrics.items()})
         wandb.finish()
 
     cprint("\n[Training] Complete! Checkpoints saved to:", "magenta")
