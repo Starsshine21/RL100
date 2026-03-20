@@ -155,12 +155,12 @@ training:
   num_offline_iterations: 10          # M iterations of offline RL loop
   critic_epochs: 20                  # With reward_scale=10 Q_loss converges by epoch 30-35;
                                      # training beyond that causes bootstrapping drift (Q 40x overestimated)
-  ppo_epochs: 20                    # Epochs to optimize policy with PPO
-  ppo_inner_steps: 2                 # Inner PPO gradient steps per batch (keep ratio != 1)
+  ppo_epochs: 10                    # Epochs to optimize policy with PPO
+  ppo_inner_steps: 1                 # Inner PPO gradient steps per batch (keep ratio != 1)
   collection_episodes: 20            # Episodes to collect per iteration
   cd_every: 5                        # Consistency distillation frequency (steps)
-  lambda_cd: 1.0                     # Paper Eq.22: L_total = L_RL + λ_CD·L_CD
-  rl_policy_lr: 1.0e-5              # Policy LR during RL phase (10x smaller than IL per tag3)
+  lambda_cd: 0                     # Paper Eq.22: L_total = L_RL + λ_CD·L_CD
+  rl_policy_lr: 2.0e-5              # Policy LR during RL phase (10x smaller than IL per tag3)
 
   # Phase 3: Online RL
   run_online_rl: true               # Whether to run online RL fine-tuning

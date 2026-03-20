@@ -165,7 +165,7 @@ class DP3(BasePolicy):
         action_chunk = self.extract_action_chunk(action_trajectory)
         return action_chunk.reshape(action_chunk.shape[0], -1)
 
-    def _sample_action_from_global_cond(self, global_cond):
+    def _sample_action_from_global_cond(self, global_cond, initial_noise=None):
         batch_size = global_cond.shape[0]
         device = global_cond.device
         dtype = next(self.parameters()).dtype
@@ -179,6 +179,7 @@ class DP3(BasePolicy):
             cond_data,
             cond_mask,
             global_cond=global_cond,
+            initial_noise=initial_noise,
             **self.kwargs,
         )
         naction_pred = nsample[..., :self.action_dim]
@@ -190,8 +191,12 @@ class DP3(BasePolicy):
             'naction_pred': naction_pred,
         }
 
-    def predict_action_from_global_cond(self, global_cond: torch.Tensor) -> Dict[str, torch.Tensor]:
-        return self._sample_action_from_global_cond(global_cond)
+    def predict_action_from_global_cond(
+        self,
+        global_cond: torch.Tensor,
+        initial_noise: torch.Tensor = None,
+    ) -> Dict[str, torch.Tensor]:
+        return self._sample_action_from_global_cond(global_cond, initial_noise=initial_noise)
         
     # ========= inference  ============
     def conditional_sample(self, 
@@ -199,17 +204,25 @@ class DP3(BasePolicy):
             condition_data_pc=None, condition_mask_pc=None,
             local_cond=None, global_cond=None,
             generator=None,
+            initial_noise=None,
             # keyword arguments to scheduler.step
             **kwargs
             ):
         model = self.model
         scheduler = self.noise_scheduler
 
-
-        trajectory = torch.randn(
-            size=condition_data.shape, 
-            dtype=condition_data.dtype,
-            device=condition_data.device)
+        if initial_noise is not None:
+            trajectory = initial_noise.to(
+                device=condition_data.device,
+                dtype=condition_data.dtype,
+            ).clone()
+        else:
+            trajectory = torch.randn(
+                size=condition_data.shape,
+                dtype=condition_data.dtype,
+                device=condition_data.device,
+                generator=generator,
+            )
 
         # set step values
         scheduler.set_timesteps(self.num_inference_steps)

@@ -506,6 +506,7 @@ class TransitionModel:
         self,
         obs_features: torch.Tensor,  # [B, obs_feature_dim]
         naction: torch.Tensor,        # [B, action_dim]
+        deterministic: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict next obs features and reward via one ensemble step.
@@ -523,13 +524,19 @@ class TransitionModel:
         x = self.scaler.transform_tensor(x)             # normalise inputs
 
         mean, logvar = self.model(x)                     # [E, B, out_dim]
-        std = torch.exp(0.5 * logvar)
-        samples = mean + torch.randn_like(std) * std     # [E, B, out_dim]
+        elite_indices = self.model.elites.long()
+        elite_mean = mean[elite_indices]
 
-        # Select one elite per sample
-        elite_idxs = torch.tensor(
-            self.model.random_elite_idxs(B), device=self.device)  # [B]
-        selected = samples[elite_idxs, torch.arange(B, device=self.device)]  # [B, out_dim]
+        if deterministic:
+            selected = elite_mean.mean(dim=0)            # [B, out_dim]
+        else:
+            std = torch.exp(0.5 * logvar)
+            samples = mean + torch.randn_like(std) * std     # [E, B, out_dim]
+
+            # Select one elite per sample
+            elite_idxs = torch.tensor(
+                self.model.random_elite_idxs(B), device=self.device)  # [B]
+            selected = samples[elite_idxs, torch.arange(B, device=self.device)]  # [B, out_dim]
 
         delta_feat = selected[:, :-1]           # [B, obs_feature_dim]
         pred_reward = selected[:, -1:]          # [B, 1]

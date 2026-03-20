@@ -183,6 +183,35 @@ class RL100Trainer:
         self.offline_collection_success_history = []
         self.online_collection_success_history = []
 
+    def _reset_policy_optimizer(self, lr: Optional[float] = None) -> None:
+        """
+        Recreate the policy optimizer and discard any carried optimizer state.
+        This is useful when switching from IL to PPO so Adam moments from BC do
+        not cause an oversized first PPO step.
+        """
+        self.policy_optimizer = hydra.utils.instantiate(
+            self.config.optimizer.policy,
+            params=self.policy.parameters()
+        )
+        if lr is not None:
+            for pg in self.policy_optimizer.param_groups:
+                pg['lr'] = float(lr)
+
+    def _prepare_policy_optimizer_for_bc(self) -> None:
+        bc_lr = float(self.config.optimizer.policy.lr)
+        self._reset_policy_optimizer(lr=bc_lr)
+        cprint(f"[BC] Reset policy optimizer state and set LR: {bc_lr:.2e}", "cyan")
+
+    def _prepare_policy_optimizer_for_rl(self) -> float:
+        rl_lr = float(getattr(self.config.training, 'rl_policy_lr', 1e-5))
+        previous_lr = float(self.policy_optimizer.param_groups[0]['lr'])
+        self._reset_policy_optimizer(lr=rl_lr)
+        cprint(
+            f"[RL PPO] Reset policy optimizer state and set LR: {previous_lr:.2e} → {rl_lr:.2e}",
+            "cyan"
+        )
+        return rl_lr
+
     def _encode_obs_representations(
         self,
         obs_dict: Dict[str, torch.Tensor],
@@ -404,6 +433,8 @@ class RL100Trainer:
         if self.ema_policy is not None:
             self.ema_policy.set_normalizer(normalizer)
             self.ema_policy.to(self.device)
+
+        self._prepare_policy_optimizer_for_bc()
 
         # Training loop
         il_loss_per_epoch = []
@@ -771,8 +802,71 @@ class RL100Trainer:
         cprint(f"[RL100Trainer] Relabeled {n_episodes} episodes "
                f"({rb.n_steps} steps) with reward_type={reward_type}.", "green")
 
-    def _evaluate_policy_amq(self, dataset: BaseDataset, num_batches: int = 20,
-                             rollout_horizon: int = 5) -> float:
+    def _prepare_amq_eval_feature_batches(
+        self,
+        dataset: BaseDataset,
+        num_batches: int,
+        eval_seed: Optional[int] = None,
+    ) -> List[torch.Tensor]:
+        """Prepare a fixed set of initial states for AM-Q evaluation."""
+        if "cross_attention" in getattr(self.policy, 'condition_type', ''):
+            raise NotImplementedError(
+                "AM-Q feature-space rollout currently supports film-style conditioning only."
+            )
+
+        from torch.utils.data import DataLoader as _DL
+
+        ope_cfg = getattr(self.config, 'ope', None)
+        shuffle_batches = bool(getattr(ope_cfg, 'shuffle_batches', True))
+        data_generator = None
+        if eval_seed is not None:
+            data_generator = torch.Generator()
+            data_generator.manual_seed(int(eval_seed))
+
+        loader = _DL(
+            dataset,
+            batch_size=self.config.dataloader.batch_size,
+            shuffle=shuffle_batches,
+            num_workers=0,
+            pin_memory=True,
+            generator=data_generator,
+        )
+
+        feature_batches = []
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(loader):
+                if batch_idx >= num_batches:
+                    break
+                batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
+                obs_features = self._encode_obs_features(batch['obs'])
+                feature_batches.append(obs_features.detach().cpu())
+
+        return feature_batches
+
+    def _sample_amq_initial_noise(
+        self,
+        batch_size: int,
+        policy: BasePolicy,
+        seed: int,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        noise_generator = torch.Generator()
+        noise_generator.manual_seed(int(seed))
+        return torch.randn(
+            (batch_size, policy.horizon, policy.action_dim),
+            generator=noise_generator,
+            dtype=dtype,
+        ).to(self.device)
+
+    def _evaluate_policy_amq(
+        self,
+        dataset: BaseDataset,
+        num_batches: int = 20,
+        rollout_horizon: int = 5,
+        policy: Optional[BasePolicy] = None,
+        eval_features: Optional[List[torch.Tensor]] = None,
+        eval_seed: Optional[int] = None,
+    ) -> float:
         """
         Offline Policy Evaluation using AM-Q (paper Eq.20).
 
@@ -795,32 +889,47 @@ class RL100Trainer:
         Returns:
             Estimated policy value J_hat.
         """
-        from torch.utils.data import DataLoader as _DL
-        loader = _DL(dataset, batch_size=self.config.dataloader.batch_size,
-                     shuffle=True, num_workers=0, pin_memory=True)
+        ope_cfg = getattr(self.config, 'ope', None)
+        deterministic_transition = bool(getattr(ope_cfg, 'deterministic_transition', True))
+        use_common_random_numbers = bool(getattr(ope_cfg, 'use_common_random_numbers', True))
 
-        eval_policy = self.policy
+        eval_policy = self.policy if policy is None else policy
+        policy_was_training = bool(getattr(eval_policy, 'training', False))
+        critics_was_training = bool(getattr(self.critics, 'training', False))
         eval_policy.eval()
         self.critics.eval()
         cumulative_q = []
         gamma_chunk = self.critics.gamma  # chunk-level discount
 
+        if eval_features is None:
+            eval_features = self._prepare_amq_eval_feature_batches(
+                dataset=dataset,
+                num_batches=num_batches,
+                eval_seed=eval_seed,
+            )
+
         with torch.no_grad():
-            for i, batch in enumerate(loader):
-                if i >= num_batches:
-                    break
-                batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
-                obs_dict = batch['obs']
-
-                # Encode initial observations
-                obs_features = self._encode_obs_features(obs_dict, policy=eval_policy)
-
+            for batch_idx, init_features in enumerate(eval_features):
+                obs_features = init_features.to(self.device, non_blocking=True)
                 # H-step rollout
                 batch_q_sum = torch.zeros(obs_features.shape[0], 1, device=self.device)
                 cur_features = obs_features
 
                 for h in range(rollout_horizon):
-                    action_pred = eval_policy.predict_action_from_global_cond(cur_features)
+                    initial_noise = None
+                    if use_common_random_numbers and eval_seed is not None:
+                        noise_seed = int(eval_seed + batch_idx * 1009 + h * 104729)
+                        initial_noise = self._sample_amq_initial_noise(
+                            batch_size=cur_features.shape[0],
+                            policy=eval_policy,
+                            seed=noise_seed,
+                            dtype=cur_features.dtype,
+                        )
+
+                    action_pred = eval_policy.predict_action_from_global_cond(
+                        cur_features,
+                        initial_noise=initial_noise,
+                    )
                     naction = eval_policy.normalizer['action'].normalize(
                         action_pred['action']
                     ).reshape(cur_features.shape[0], -1)
@@ -833,14 +942,20 @@ class RL100Trainer:
                     if h < rollout_horizon - 1 and hasattr(self, 'transition_model'):
                         try:
                             next_features, _ = self.transition_model.predict_next_features(
-                                cur_features, naction)
+                                cur_features,
+                                naction,
+                                deterministic=deterministic_transition,
+                            )
                             cur_features = next_features
                         except Exception:
                             break  # transition model not trained yet
 
                 cumulative_q.append(batch_q_sum.mean().item())
 
-        eval_policy.train()
+        if policy_was_training:
+            eval_policy.train()
+        if critics_was_training:
+            self.critics.train()
         return float(np.mean(cumulative_q)) if cumulative_q else 0.0
 
     def offline_rl_optimize(
@@ -868,10 +983,32 @@ class RL100Trainer:
         cprint(f"\n[RL100Trainer] Phase 2b: Offline RL Optimization (Iteration {self.offline_rl_iteration})", "cyan")
 
         config = self.config
+        ope_cfg = getattr(config, 'ope', None)
+        ope_num_batches = int(getattr(ope_cfg, 'num_batches', 20))
+        ope_rollout_horizon = int(getattr(ope_cfg, 'rollout_horizon', 5))
+        ope_seed_base = int(getattr(ope_cfg, 'seed', int(getattr(config.training, 'seed', 0))))
+        ope_seed = ope_seed_base + 10007 * int(self.offline_rl_iteration)
 
-        # ── Step 0: Evaluate behavior policy before PPO (for OPE gate) ──────────
-        j_old = self._evaluate_policy_amq(dataset)
+        # ── Step 0: Prepare a fixed AM-Q evaluation context for fair OPE gating ─
+        ope_eval_features = self._prepare_amq_eval_feature_batches(
+            dataset=dataset,
+            num_batches=ope_num_batches,
+            eval_seed=ope_seed,
+        )
+        j_old = self._evaluate_policy_amq(
+            dataset=dataset,
+            num_batches=ope_num_batches,
+            rollout_horizon=ope_rollout_horizon,
+            policy=self.policy,
+            eval_features=ope_eval_features,
+            eval_seed=ope_seed,
+        )
         cprint(f"[OPE] Behavior policy value J_old = {j_old:.4f}", "cyan")
+
+        # ── Step 1: Reset policy optimizer state for RL fine-tuning ──────────────
+        # Reusing Adam moments from IL / checkpoint resume can make the first PPO
+        # step disproportionately large even with a small RL learning rate.
+        self._prepare_policy_optimizer_for_rl()
 
         # ── Step 1: Save snapshot for potential rollback ──────────────────────────
         policy_snapshot = copy.deepcopy(self.policy.state_dict())
@@ -885,14 +1022,6 @@ class RL100Trainer:
         consistency_snapshot = copy.deepcopy(self.consistency_model.state_dict())
         policy_optimizer_snapshot = copy.deepcopy(self.policy_optimizer.state_dict())
         consistency_optimizer_snapshot = copy.deepcopy(self.consistency_optimizer.state_dict())
-
-        # ── Step 1b: Reduce policy LR for RL fine-tuning (tag3: 10× smaller than IL) ─
-        rl_lr = getattr(config.training, 'rl_policy_lr', 1e-5)
-        current_lr = self.policy_optimizer.param_groups[0]['lr']
-        if abs(current_lr - rl_lr) > 1e-10:
-            cprint(f"[RL PPO] Reducing policy LR: {current_lr:.2e} → {rl_lr:.2e}", "cyan")
-            for pg in self.policy_optimizer.param_groups:
-                pg['lr'] = rl_lr
 
         # ── Step 2: Freeze encoder (paper: ϕIL is fixed during offline RL) ───────
         for param in self.policy.obs_encoder.parameters():
@@ -923,6 +1052,10 @@ class RL100Trainer:
             grad_norms = []
             approx_kls = []
             clip_fracs = []
+            mean_ratios = []
+            min_ratios = []
+            max_ratios = []
+            mean_abs_ratio_devs = []
 
             for batch_idx, batch in enumerate(train_dataloader):
                 batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
@@ -945,10 +1078,17 @@ class RL100Trainer:
                 # ── Sample old trajectory ONCE per batch (fix old policy) ─────────
                 trajectory_old, log_probs_old = self.policy.sample_for_ppo(global_cond=global_cond)
                 run_cd_this_batch = (self.global_step % config.training.cd_every == 0)
+                batch_ppo_losses = []
+                batch_approx_kls = []
+                batch_clip_fracs = []
+                batch_mean_ratios = []
+                batch_min_ratios = []
+                batch_max_ratios = []
+                batch_mean_abs_ratio_devs = []
 
                 # ── Inner PPO loop: N gradient steps with SAME old trajectory ─────
                 for ppo_inner in range(ppo_inner_steps):
-                    ppo_loss, ppo_info = self.policy.compute_ppo_loss(
+                    ppo_loss, _ = self.policy.compute_ppo_loss(
                         obs_dict=None,
                         old_log_probs=log_probs_old,
                         advantages=advantages,
@@ -985,10 +1125,31 @@ class RL100Trainer:
                     if run_cd_step:
                         self.consistency_optimizer.step()
 
-                ppo_loss_display = float(-ppo_loss.item())
+                    ppo_loss_display = float(-ppo_loss.item())
+                    with torch.no_grad():
+                        _, ppo_info_post = self.policy.compute_ppo_loss(
+                            obs_dict=None,
+                            old_log_probs=log_probs_old,
+                            advantages=advantages,
+                            trajectory=trajectory_old,
+                            global_cond=global_cond,
+                        )
+                    batch_ppo_losses.append(ppo_loss_display)
+                    batch_approx_kls.append(float(ppo_info_post.get('approx_kl', 0.0)))
+                    batch_clip_fracs.append(float(ppo_info_post.get('clip_frac', 0.0)))
+                    batch_mean_ratios.append(float(ppo_info_post.get('mean_ratio', 1.0)))
+                    batch_min_ratios.append(float(ppo_info_post.get('min_ratio', 1.0)))
+                    batch_max_ratios.append(float(ppo_info_post.get('max_ratio', 1.0)))
+                    batch_mean_abs_ratio_devs.append(float(ppo_info_post.get('mean_abs_ratio_dev', 0.0)))
+
+                ppo_loss_display = float(np.mean(batch_ppo_losses)) if batch_ppo_losses else 0.0
                 ppo_losses.append(ppo_loss_display)
-                approx_kls.append(float(ppo_info.get('approx_kl', 0.0)))
-                clip_fracs.append(float(ppo_info.get('clip_frac', 0.0)))
+                approx_kls.extend(batch_approx_kls)
+                clip_fracs.extend(batch_clip_fracs)
+                mean_ratios.extend(batch_mean_ratios)
+                min_ratios.extend(batch_min_ratios)
+                max_ratios.extend(batch_max_ratios)
+                mean_abs_ratio_devs.extend(batch_mean_abs_ratio_devs)
 
                 # Update EMA
                 if self.ema_policy is not None:
@@ -999,7 +1160,12 @@ class RL100Trainer:
                     log_dict = {
                         'ppo/loss': ppo_loss_display,
                         'ppo/grad_norm': grad_norms[-1] if grad_norms else 0.0,
-                        **{f'ppo/{k}': v for k, v in ppo_info.items()}
+                        'ppo/approx_kl': float(np.mean(batch_approx_kls)) if batch_approx_kls else 0.0,
+                        'ppo/clip_frac': float(np.mean(batch_clip_fracs)) if batch_clip_fracs else 0.0,
+                        'ppo/mean_ratio': float(np.mean(batch_mean_ratios)) if batch_mean_ratios else 1.0,
+                        'ppo/min_ratio': float(np.min(batch_min_ratios)) if batch_min_ratios else 1.0,
+                        'ppo/max_ratio': float(np.max(batch_max_ratios)) if batch_max_ratios else 1.0,
+                        'ppo/mean_abs_ratio_dev': float(np.mean(batch_mean_abs_ratio_devs)) if batch_mean_abs_ratio_devs else 0.0,
                     }
                     if reg_losses:
                         log_dict['ppo/obs_reg_loss'] = reg_losses[-1]
@@ -1011,8 +1177,10 @@ class RL100Trainer:
 
             epoch_ppo_loss = float(np.mean(ppo_losses) if ppo_losses else 0.0)
             cprint(f"[Offline RL] Epoch {epoch}/{num_epochs}, PPO Loss: {epoch_ppo_loss:.4f}, "
-                   f"KL: {np.mean(approx_kls) if approx_kls else 0.0:.6f}, "
-                   f"ClipFrac: {np.mean(clip_fracs) if clip_fracs else 0.0:.4f}, "
+                   f"PostKL: {np.mean(approx_kls) if approx_kls else 0.0:.3e}, "
+                   f"PostClipFrac: {np.mean(clip_fracs) if clip_fracs else 0.0:.6f}, "
+                   f"PostMeanRatio: {np.mean(mean_ratios) if mean_ratios else 1.0:.6f}, "
+                   f"PostRatioDev: {np.mean(mean_abs_ratio_devs) if mean_abs_ratio_devs else 0.0:.3e}, "
                    f"GradNorm: {np.mean(grad_norms) if grad_norms else 0.0:.4f}, "
                    f"Reg Loss: {np.mean(reg_losses) if reg_losses else 0:.4f}, "
                    f"CD Loss: {np.mean(cd_losses) if cd_losses else 0:.4f}", "green")
@@ -1037,8 +1205,17 @@ class RL100Trainer:
         # ── Step 5: OPE Gate (paper Eq.20) ───────────────────────────────────────
         # Accept the PPO-updated policy only if AM-Q improves by δ = 0.05·|J_old|.
         # Otherwise roll back to the behavior-policy snapshot.
-        j_new = self._evaluate_policy_amq(dataset)
-        delta = 0.05 * abs(j_old) if j_old != 0 else 0.0
+        j_new = self._evaluate_policy_amq(
+            dataset=dataset,
+            num_batches=ope_num_batches,
+            rollout_horizon=ope_rollout_horizon,
+            policy=self.policy,
+            eval_features=ope_eval_features,
+            eval_seed=ope_seed,
+        )
+        delta_coef = float(getattr(ope_cfg, 'delta_coef', 0.05))
+        delta_abs_min = float(getattr(ope_cfg, 'delta_abs_min', 0.0))
+        delta = max(delta_abs_min, delta_coef * abs(j_old)) if j_old != 0 else delta_abs_min
         if j_new - j_old >= delta:
             cprint(f"[OPE] Policy ACCEPTED: J_new={j_new:.4f} > J_old={j_old:.4f} + δ={delta:.4f}", "green")
         else:
@@ -1063,6 +1240,10 @@ class RL100Trainer:
 
         return {
             'ppo_loss': np.mean(ppo_losses),
+            'approx_kl': np.mean(approx_kls) if approx_kls else 0,
+            'clip_frac': np.mean(clip_fracs) if clip_fracs else 0,
+            'mean_ratio': np.mean(mean_ratios) if mean_ratios else 1.0,
+            'mean_abs_ratio_dev': np.mean(mean_abs_ratio_devs) if mean_abs_ratio_devs else 0,
             'reg_loss': np.mean(reg_losses) if reg_losses else 0,
             'cd_loss': np.mean(cd_losses) if cd_losses else 0
         }
@@ -1073,6 +1254,7 @@ class RL100Trainer:
         num_episodes: int,
         policy_mode: Optional[str] = None,
         use_ema: Optional[bool] = None,
+        collect_trajectory: bool = False,
     ) -> Tuple[Dict, list]:
         """
         Phase 2c: Collect new data by rolling out policy in environment.
@@ -1099,7 +1281,12 @@ class RL100Trainer:
             reward_type = getattr(self.config.critics, 'reward_type', 'sparse')
             chunk_gamma = float(getattr(self.config.task.dataset, 'gamma', 0.99))
             metrics, episodes = env_runner.run_and_collect(
-                eval_policy, num_episodes=num_episodes, reward_type=reward_type, gamma=chunk_gamma)
+                eval_policy,
+                num_episodes=num_episodes,
+                reward_type=reward_type,
+                gamma=chunk_gamma,
+                collect_trajectory=collect_trajectory,
+            )
 
         cprint(f"[Data Collection] Success Rate: {metrics.get('mean_success_rates', 0):.3f}, "
                f"EnvReturn: {metrics.get('mean_env_rewards', metrics.get('mean_traj_rewards', 0)):.2f}, "
@@ -1118,35 +1305,36 @@ class RL100Trainer:
         eval_policy.train()
         return metrics, episodes
 
-    def _filter_episodes_for_merge(
+    def _build_il_episode_mask(
         self,
         episodes: List[dict],
         stage: str,
-    ) -> List[dict]:
+    ) -> np.ndarray:
         if not episodes:
-            return episodes
+            return np.zeros((0,), dtype=bool)
 
         merge_success_only = bool(getattr(self.config.runtime, 'merge_success_only', False))
         if not merge_success_only:
-            return episodes
+            return np.ones(len(episodes), dtype=bool)
 
-        kept_episodes = []
+        il_episode_mask = []
         for episode in episodes:
             if 'success' in episode:
                 is_success = bool(episode['success'])
             else:
                 reward = np.asarray(episode.get('reward', []), dtype=np.float32)
                 is_success = bool(np.any(reward > 0))
-            if is_success:
-                kept_episodes.append(episode)
+            il_episode_mask.append(is_success)
 
-        dropped = len(episodes) - len(kept_episodes)
+        il_episode_mask = np.asarray(il_episode_mask, dtype=bool)
+        dropped = len(episodes) - int(il_episode_mask.sum())
         cprint(
-            f"[Dataset] {stage}: keeping {len(kept_episodes)}/{len(episodes)} successful episodes "
-            f"(dropped {dropped} failures) before merge.",
+            f"[Dataset] {stage}: all {len(episodes)} episodes remain in RL replay; "
+            f"IL retrain keeps {int(il_episode_mask.sum())}/{len(episodes)} successful episodes "
+            f"(drops {dropped} failures).",
             "cyan",
         )
-        return kept_episodes
+        return il_episode_mask
 
     def online_rl_optimize(
         self,
@@ -1288,6 +1476,10 @@ class RL100Trainer:
             epoch_grad_norms = []
             epoch_approx_kls = []
             epoch_clip_fracs = []
+            epoch_mean_ratios = []
+            epoch_min_ratios = []
+            epoch_max_ratios = []
+            epoch_mean_abs_ratio_devs = []
             for start in range(0, len(policy_indices), batch_size):
                 idx = policy_indices[start:start + batch_size]
                 obs_dict = {
@@ -1317,13 +1509,14 @@ class RL100Trainer:
                 ).unsqueeze(-1)
                 _, global_cond = self._encode_obs_representations(obs_dict)
 
-                ppo_loss, ppo_info = self.policy.compute_ppo_loss(
+                ppo_loss, _ = self.policy.compute_ppo_loss(
                     obs_dict=None,
                     old_log_probs=old_log_probs,
                     advantages=advantages,
                     trajectory=trajectories,
                     global_cond=global_cond,
                 )
+                ppo_loss_display = float(-ppo_loss.item())
 
                 total_loss = ppo_loss
                 reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
@@ -1354,12 +1547,25 @@ class RL100Trainer:
                 if self.ema_policy is not None:
                     self.ema.step(self.policy)
 
+                with torch.no_grad():
+                    _, ppo_info_post = self.policy.compute_ppo_loss(
+                        obs_dict=None,
+                        old_log_probs=old_log_probs,
+                        advantages=advantages,
+                        trajectory=trajectories,
+                        global_cond=global_cond,
+                    )
+
                 if config.logging.use_wandb and self.global_step % config.training.log_every == 0:
-                    ppo_loss_display = float(-ppo_loss.item())
                     log_dict = {
                         'online/ppo_loss': ppo_loss_display,
                         'online/grad_norm': epoch_grad_norms[-1] if epoch_grad_norms else 0.0,
-                        **{f'online/{k}': v for k, v in ppo_info.items()}
+                        'online/approx_kl': float(ppo_info_post.get('approx_kl', 0.0)),
+                        'online/clip_frac': float(ppo_info_post.get('clip_frac', 0.0)),
+                        'online/mean_ratio': float(ppo_info_post.get('mean_ratio', 1.0)),
+                        'online/min_ratio': float(ppo_info_post.get('min_ratio', 1.0)),
+                        'online/max_ratio': float(ppo_info_post.get('max_ratio', 1.0)),
+                        'online/mean_abs_ratio_dev': float(ppo_info_post.get('mean_abs_ratio_dev', 0.0)),
                     }
                     if epoch_reg_losses:
                         log_dict['online/obs_reg_loss'] = epoch_reg_losses[-1]
@@ -1368,9 +1574,13 @@ class RL100Trainer:
                     wandb.log(log_dict, step=self.global_step)
 
                 self.global_step += 1
-                epoch_ppo_losses.append(float(-ppo_loss.item()))
-                epoch_approx_kls.append(float(ppo_info.get('approx_kl', 0.0)))
-                epoch_clip_fracs.append(float(ppo_info.get('clip_frac', 0.0)))
+                epoch_ppo_losses.append(ppo_loss_display)
+                epoch_approx_kls.append(float(ppo_info_post.get('approx_kl', 0.0)))
+                epoch_clip_fracs.append(float(ppo_info_post.get('clip_frac', 0.0)))
+                epoch_mean_ratios.append(float(ppo_info_post.get('mean_ratio', 1.0)))
+                epoch_min_ratios.append(float(ppo_info_post.get('min_ratio', 1.0)))
+                epoch_max_ratios.append(float(ppo_info_post.get('max_ratio', 1.0)))
+                epoch_mean_abs_ratio_devs.append(float(ppo_info_post.get('mean_abs_ratio_dev', 0.0)))
 
             if epoch_ppo_losses:
                 ppo_losses.append(float(np.mean(epoch_ppo_losses)))
@@ -1387,8 +1597,10 @@ class RL100Trainer:
             cprint(
                 f"[Online RL] Epoch {epoch + 1}/{num_epochs}, "
                 f"PPO Loss: {np.mean(epoch_ppo_losses) if epoch_ppo_losses else 0.0:.4f}, "
-                f"KL: {np.mean(epoch_approx_kls) if epoch_approx_kls else 0.0:.6f}, "
-                f"ClipFrac: {np.mean(epoch_clip_fracs) if epoch_clip_fracs else 0.0:.4f}, "
+                f"PostKL: {np.mean(epoch_approx_kls) if epoch_approx_kls else 0.0:.3e}, "
+                f"PostClipFrac: {np.mean(epoch_clip_fracs) if epoch_clip_fracs else 0.0:.6f}, "
+                f"PostMeanRatio: {np.mean(epoch_mean_ratios) if epoch_mean_ratios else 1.0:.6f}, "
+                f"PostRatioDev: {np.mean(epoch_mean_abs_ratio_devs) if epoch_mean_abs_ratio_devs else 0.0:.3e}, "
                 f"GradNorm: {np.mean(epoch_grad_norms) if epoch_grad_norms else 0.0:.4f}, "
                 f"Reg Loss: {np.mean(epoch_reg_losses) if epoch_reg_losses else 0.0:.4f}, "
                 f"CD Loss: {np.mean(epoch_cd_losses) if epoch_cd_losses else 0.0:.4f}",
@@ -1596,6 +1808,7 @@ class RL100Trainer:
                 env_runner=env_runner,
                 num_episodes=config.training.collection_episodes,
                 use_ema=False,
+                collect_trajectory=False,
             )
             self.offline_collection_success_history.append(
                 float(collection_metrics.get('mean_success_rates', 0.0))
@@ -1610,11 +1823,14 @@ class RL100Trainer:
                 wandb.log({
                     'collection/offline_success_curve': wandb.Image(offline_collection_plot_path),
                 }, step=self.global_step)
-            new_episodes = self._filter_episodes_for_merge(new_episodes, stage='offline collection')
+            il_episode_mask_new = self._build_il_episode_mask(new_episodes, stage='offline collection')
 
             # Algorithm 1 Line 11: D_{m+1} = D_m ∪ D_new
             if new_episodes:
-                n_new = current_dataset.merge_episodes(new_episodes)
+                n_new = current_dataset.merge_episodes(
+                    new_episodes,
+                    il_episode_mask_new=il_episode_mask_new,
+                )
                 cprint(f"[Dataset] Merged {len(new_episodes)} episodes "
                        f"({n_new} steps) → total {current_dataset.replay_buffer.n_steps} steps, "
                        f"{current_dataset.replay_buffer.n_episodes} episodes", "cyan")
@@ -1625,8 +1841,10 @@ class RL100Trainer:
                 # The 10× reduction only applies to RL fine-tuning (OfflineRL step).
                 _apply_vib_betas(1.0)
                 cprint(f"\n[RL100Trainer] Retraining IL on merged dataset...", "cyan")
+                il_dataset = current_dataset.get_il_training_dataset() \
+                    if hasattr(current_dataset, 'get_il_training_dataset') else current_dataset
                 self.train_imitation_learning(
-                    dataset=current_dataset,
+                    dataset=il_dataset,
                     num_epochs=config.training.il_retrain_epochs,
                     env_runner=env_runner,
                     plot_tag=f"retrain_iter_{int(iteration):02d}"
@@ -1643,10 +1861,8 @@ class RL100Trainer:
             cprint(" "*20 + "PHASE 3: ONLINE RL FINE-TUNING", "green")
             cprint("="*80 + "\n", "green")
 
-            # Reduce policy LR for online fine-tuning
-            rl_lr = getattr(config.training, 'rl_policy_lr', 1e-5)
-            for pg in self.policy_optimizer.param_groups:
-                pg['lr'] = rl_lr
+            # Switch to a clean RL optimizer state before online fine-tuning.
+            self._prepare_policy_optimizer_for_rl()
 
             for online_iter in range(config.training.online_rl_iterations):
                 cprint(f"\n[Online RL] Iteration {online_iter + 1}/{config.training.online_rl_iterations}", "green")
@@ -1657,6 +1873,7 @@ class RL100Trainer:
                     num_episodes=config.training.online_collection_episodes,
                     policy_mode='ddim',
                     use_ema=False,
+                    collect_trajectory=True,
                 )
                 self.online_collection_success_history.append(
                     float(collection_metrics.get('mean_success_rates', 0.0))
@@ -1671,7 +1888,7 @@ class RL100Trainer:
                     wandb.log({
                         'collection/online_success_curve': wandb.Image(online_collection_plot_path),
                     }, step=self.global_step)
-                online_episodes = self._filter_episodes_for_merge(online_episodes, stage='online collection')
+                online_il_episode_mask = self._build_il_episode_mask(online_episodes, stage='online collection')
 
                 if not online_episodes:
                     cprint("[Online RL] No episodes collected, skipping.", "yellow")
@@ -1679,7 +1896,10 @@ class RL100Trainer:
 
                 # Keep the raw online episodes for bookkeeping / future analysis,
                 # but optimize the policy with the on-policy GAE objective.
-                current_dataset.merge_episodes(online_episodes)
+                current_dataset.merge_episodes(
+                    online_episodes,
+                    il_episode_mask_new=online_il_episode_mask,
+                )
 
                 # 2. Online PPO + GAE optimization (paper Eq.21).
                 _apply_vib_betas(0.1)

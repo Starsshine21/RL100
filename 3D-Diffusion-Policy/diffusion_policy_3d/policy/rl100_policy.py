@@ -523,6 +523,7 @@ class RL100Policy(DP3):
         ratios = []
         approx_kls = []
         clip_fracs = []
+        mean_abs_ratio_devs = []
 
         for k, log_prob_new in new_log_probs:
             # Probability ratio
@@ -531,8 +532,10 @@ class RL100Policy(DP3):
             ratios.append(ratio.mean().item())
             approx_kl = ((ratio - 1.0) - log_ratio).mean()
             clip_frac = ((ratio - 1.0).abs() > self.ppo_clip_eps).float().mean()
+            mean_abs_ratio_dev = (ratio - 1.0).abs().mean()
             approx_kls.append(approx_kl.item())
             clip_fracs.append(clip_frac.item())
+            mean_abs_ratio_devs.append(mean_abs_ratio_dev.item())
 
             # Clipped ratio
             ratio_clipped = torch.clamp(
@@ -560,6 +563,7 @@ class RL100Policy(DP3):
             'max_ratio': max(ratios),
             'approx_kl': sum(approx_kls) / len(approx_kls),
             'clip_frac': sum(clip_fracs) / len(clip_fracs),
+            'mean_abs_ratio_dev': sum(mean_abs_ratio_devs) / len(mean_abs_ratio_devs),
             'mean_advantage': advantages.mean().item(),
             'std_advantage': advantages.std().item(),
         }

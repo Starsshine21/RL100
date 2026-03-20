@@ -180,10 +180,7 @@ def main(cfg: OmegaConf):
         eval_policy = trainer.get_runtime_policy(mode=policy_mode, use_ema=final_eval_use_ema)
         eval_policy.eval()
         with torch.no_grad():
-            try:
-                metrics = env_runner.run(eval_policy, num_episodes=50)
-            except TypeError:
-                metrics = env_runner.run(eval_policy)
+            metrics = env_runner.run(eval_policy)
         final_results[policy_mode] = metrics
 
     cprint("\n" + "="*80, "green")

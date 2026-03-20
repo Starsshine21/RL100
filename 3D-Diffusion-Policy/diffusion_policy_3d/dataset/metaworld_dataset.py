@@ -57,6 +57,7 @@ class MetaworldDataset(BaseDataset):
         self.action_chunk_start = pad_before
         self.action_chunk_end = self.action_chunk_start + n_action_steps
         self._rebuild_sampler(train_mask)
+        self.il_train_mask = np.asarray(train_mask, dtype=bool).copy()
         self._refresh_episode_boundaries()
         self._shape_mismatch_warned = False
 
@@ -125,6 +126,24 @@ class MetaworldDataset(BaseDataset):
         val_set.train_mask = episode_mask
         val_set.val_mask = episode_mask
         return val_set
+
+    def get_il_training_dataset(self):
+        il_set = copy.copy(self)
+        episode_mask = np.asarray(
+            getattr(self, 'il_train_mask', getattr(self, 'train_mask', np.ones(self.replay_buffer.n_episodes, dtype=bool))),
+            dtype=bool,
+        )
+        il_set.sampler = SequenceSampler(
+            replay_buffer=self.replay_buffer,
+            sequence_length=self.horizon,
+            pad_before=self.pad_before,
+            pad_after=self.pad_after,
+            episode_mask=episode_mask
+        )
+        il_set.train_mask = episode_mask
+        il_set.il_train_mask = episode_mask
+        il_set.val_mask = np.asarray(getattr(self, 'val_mask', np.zeros(self.replay_buffer.n_episodes, dtype=bool)), dtype=bool)
+        return il_set
 
     def get_normalizer(self, mode='limits', **kwargs):
         data = {
@@ -228,7 +247,7 @@ class MetaworldDataset(BaseDataset):
         torch_data = dict_apply(data, torch.from_numpy)
         return torch_data
 
-    def merge_episodes(self, episodes: list) -> int:
+    def merge_episodes(self, episodes: list, il_episode_mask_new=None) -> int:
         """
         Merge newly collected episodes into the replay buffer in-place.
 
@@ -251,6 +270,7 @@ class MetaworldDataset(BaseDataset):
         n_old_episodes = int(self.replay_buffer.n_episodes)
         old_train_mask = np.asarray(getattr(self, 'train_mask', np.ones(n_old_episodes, dtype=bool)), dtype=bool)
         old_val_mask = np.asarray(getattr(self, 'val_mask', np.zeros(n_old_episodes, dtype=bool)), dtype=bool)
+        old_il_train_mask = np.asarray(getattr(self, 'il_train_mask', old_train_mask), dtype=bool)
         target_state_shape = tuple(self.replay_buffer['state'].shape[1:])
         target_action_shape = tuple(self.replay_buffer['action'].shape[1:])
         target_pc_shape = tuple(self.replay_buffer['point_cloud'].shape[1:])
@@ -314,6 +334,14 @@ class MetaworldDataset(BaseDataset):
 
         n_total = self.replay_buffer.n_episodes
         n_new_episodes = n_total - n_old_episodes
+        if il_episode_mask_new is None:
+            il_episode_mask_new = np.ones(n_new_episodes, dtype=bool)
+        else:
+            il_episode_mask_new = np.asarray(il_episode_mask_new, dtype=bool)
+            if len(il_episode_mask_new) != n_new_episodes:
+                raise ValueError(
+                    f"il_episode_mask_new length mismatch: expected {n_new_episodes}, got {len(il_episode_mask_new)}"
+                )
         if len(old_train_mask) == n_old_episodes:
             # Preserve the original train/val split and append newly collected
             # episodes to the training set.
@@ -331,5 +359,12 @@ class MetaworldDataset(BaseDataset):
             )
         else:
             self.val_mask = np.zeros(n_total, dtype=bool)
+        if len(old_il_train_mask) == n_old_episodes:
+            self.il_train_mask = np.concatenate(
+                [old_il_train_mask, il_episode_mask_new],
+                axis=0,
+            )
+        else:
+            self.il_train_mask = episode_mask.copy()
 
         return n_new_steps

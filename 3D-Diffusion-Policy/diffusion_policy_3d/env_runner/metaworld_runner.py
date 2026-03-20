@@ -135,13 +135,17 @@ class MetaworldRunner(BaseRunner):
 
     def run_and_collect(self, policy: BasePolicy, num_episodes: int,
                         reward_type: str = 'sparse',
-                        gamma: float = 0.99):
+                        gamma: float = 0.99,
+                        collect_trajectory: bool = False):
         """
         Roll out policy and collect trajectory data for dataset merging.
 
         Args:
             reward_type: 'sparse' — reward=1 at last step if success, 0 elsewhere
                          'dense'  — use MetaWorld env shaped reward each step
+            collect_trajectory: if True, use the PPO trajectory-producing rollout
+                         path and store denoising trajectory / old log-probs.
+                         If False, use the deterministic runtime policy path.
 
         Returns:
             metrics  : same dict as run()
@@ -193,7 +197,7 @@ class MetaworldRunner(BaseRunner):
                 }
 
                 with torch.no_grad():
-                    if hasattr(policy, 'predict_action_with_trajectory'):
+                    if collect_trajectory and hasattr(policy, 'predict_action_with_trajectory'):
                         action_dict = policy.predict_action_with_trajectory(obs_dict_input)
                     else:
                         action_dict = policy.predict_action(obs_dict_input)
