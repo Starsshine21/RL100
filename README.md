@@ -272,7 +272,7 @@ policy:
 
 不要改成 `sample`。
 
-### 4. `sigma_max` 不要无脑共用
+### 4. `sigma_max` 的值
 
 根据 RL-100 论文 `2510.14830 v4` 的消融结论，stochastic DDIM 的标准差上界需要按控制模式区分：
 
