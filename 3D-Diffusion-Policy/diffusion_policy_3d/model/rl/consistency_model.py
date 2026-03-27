@@ -241,7 +241,8 @@ class ConsistencyDistillation:
                 teacher_output = self.teacher_policy.conditional_sample(
                     condition_data=noisy_action,
                     condition_mask=torch.zeros_like(noisy_action, dtype=torch.bool),
-                    global_cond=global_cond
+                    global_cond=global_cond,
+                    initial_noise=noisy_action,
                 )
 
             # Generate student output (1 step)

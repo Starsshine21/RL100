@@ -155,12 +155,12 @@ training:
   num_offline_iterations: 10          # M iterations of offline RL loop
   critic_epochs: 20                  # With reward_scale=10 Q_loss converges by epoch 30-35;
                                      # training beyond that causes bootstrapping drift (Q 40x overestimated)
-  ppo_epochs: 10                    # Epochs to optimize policy with PPO
+  ppo_epochs: 3                    # Epochs to optimize policy with PPO
   ppo_inner_steps: 1                 # Inner PPO gradient steps per batch (keep ratio != 1)
   collection_episodes: 20            # Episodes to collect per iteration
   cd_every: 5                        # Consistency distillation frequency (steps)
   lambda_cd: 0                     # Paper Eq.22: L_total = L_RL + λ_CD·L_CD
-  rl_policy_lr: 2.0e-5              # Policy LR during RL phase (10x smaller than IL per tag3)
+  rl_policy_lr: 1.0e-5              # Policy LR during RL phase (10x smaller than IL per tag3)
 
   # Phase 3: Online RL
   run_online_rl: true               # Whether to run online RL fine-tuning
@@ -171,7 +171,7 @@ training:
 
   # Optimization
   gradient_accumulate_every: 1
-  max_grad_norm: 1.0
+  max_grad_norm: 0.5
 
   # Logging & Evaluation
   log_every: 10                      # Log metrics every N steps
@@ -183,12 +183,22 @@ training:
   resume_path: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/after_il.ckpt
 
 # ============================================
+# OPE / AM-Q Gate
+# ============================================
+ope:
+  num_batches: 100                   # Number of initial-state mini-batches used by AM-Q
+  rollout_horizon: 3                # H-step imagined rollout depth for AM-Q / OPE
+  delta_coef: 0.01                  # Accept if J_new - J_old >= 0.03 * |J_old|
+  delta_abs_min: 0.0                # Optional absolute floor for δ
+
+# ============================================
 # Runtime Policy Selection
 # ============================================
 runtime:
   collection_policy: ddim            # Rollout policy for offline data expansion: ddim or cm
   collection_use_ema: false          # Use the current policy π_θ for rollout / OPE alignment
-  merge_success_only: true           # Only merge successful rollout episodes back into the replay dataset
+  il_retrain_success_only: true      # If true, IL retrain uses only successful rollout episodes; if false, IL also uses all merged episodes
+  merge_success_only: true           # Deprecated alias for il_retrain_success_only; kept for backward compatibility
   final_eval_policies: [ddim, cm]    # Evaluate both deployment heads by default
   final_eval_use_ema: true          # Final eval defaults to current policy unless explicitly overridden
   eval_policy_mode: ddim             # eval_rl100.py default checkpoint policy mode

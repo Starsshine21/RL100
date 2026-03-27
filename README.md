@@ -231,7 +231,7 @@ python eval_rl100.py \
 - `training.rl_policy_lr`
 - `runtime.collection_policy`
 - `runtime.collection_use_ema`
-- `runtime.merge_success_only`
+- `runtime.il_retrain_success_only`
 - `runtime.final_eval_policies`
 - `runtime.final_eval_use_ema`
 - `task.env_runner.eval_episodes`
@@ -251,7 +251,7 @@ python eval_rl100.py \
 python train_rl100.py task=metaworld_dial-turn task.env_runner.eval_episodes=100
 ```
 
-### 2. `merge_success_only` 只影响 IL retrain，不影响 RL 本身
+### 2. `il_retrain_success_only` 只影响 IL retrain，不影响 RL 本身
 
 当前逻辑是：
 

@@ -666,10 +666,10 @@ class RL100Trainer:
                     reward = batch['reward']
                     if reward.dim() == 1:
                         reward = reward.unsqueeze(-1)  # [B] -> [B, 1]
-                    # Normalise chunk reward by max per-step reward so that Q* ~ O(10)
-                    # rather than O(1000).  Metaworld shaped rewards go up to 10/step;
-                    # chunk reward = Σ γ^j r_j ≤ 10 * Σ γ^j ≈ 77.  Without scaling,
-                    # Q_pred starts near 0 while Q_target ≈ 56 → Q_loss ≈ 6000+ at epoch 0.
+                    # Optional reward normalization before Bellman backup.
+                    # This is only needed for tasks that truly provide large-magnitude
+                    # dense rewards. In the current MetaWorld sparse setup the default
+                    # reward_scale is 1.0, so no extra scaling is applied.
                     reward_scale = float(getattr(config.critics, 'reward_scale', 10.0))
                     reward = reward / reward_scale
                     done = batch.get('done', torch.zeros_like(reward))
@@ -899,7 +899,6 @@ class RL100Trainer:
         eval_policy.eval()
         self.critics.eval()
         cumulative_q = []
-        gamma_chunk = self.critics.gamma  # chunk-level discount
 
         if eval_features is None:
             eval_features = self._prepare_amq_eval_feature_batches(
@@ -934,9 +933,11 @@ class RL100Trainer:
                         action_pred['action']
                     ).reshape(cur_features.shape[0], -1)
 
-                    # Accumulate discounted Q
+                    # Paper Eq.20 sums Q-values along the imagined rollout directly.
+                    # Do not apply an extra outer discount here because Q already
+                    # represents a discounted return estimate from (s_h, a_h).
                     q = self.critics.get_q_value(cur_features, naction)  # [B, 1]
-                    batch_q_sum += (gamma_chunk ** h) * q
+                    batch_q_sum += q
 
                     # Predict next features via transition model
                     if h < rollout_horizon - 1 and hasattr(self, 'transition_model'):
@@ -958,6 +959,98 @@ class RL100Trainer:
             self.critics.train()
         return float(np.mean(cumulative_q)) if cumulative_q else 0.0
 
+    def _build_offline_ppo_buffer(
+        self,
+        dataset: BaseDataset,
+        behavior_policy: RL100Policy,
+    ) -> Tuple[List[Dict], Dict[str, float]]:
+        """
+        Build a fixed offline PPO buffer once per OfflineRL iteration.
+
+        The dataset provides the state distribution, while the frozen
+        behavior policy π_i provides the old denoising trajectory, old
+        log-probabilities, and the action chunk used to compute IQL
+        advantages. This mirrors standard PPO more closely: old data are
+        frozen for the whole optimization window and reused across epochs.
+        """
+        config = self.config
+        need_obs_cache = (
+            float(getattr(config.training, 'lambda_cd', 1.0)) > 0.0
+            or self._should_apply_obs_regularization()
+        )
+
+        cprint("[Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...", "cyan")
+        rollout_dataloader = DataLoader(
+            dataset,
+            batch_size=config.dataloader.batch_size,
+            shuffle=True,
+            num_workers=config.dataloader.num_workers,
+            pin_memory=True,
+        )
+
+        offline_buffer = []
+        raw_advantages = []
+
+        with torch.no_grad():
+            for batch in rollout_dataloader:
+                batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
+                obs_dict = batch['obs']
+                obs_features, global_cond = self._encode_obs_representations(obs_dict)
+                trajectory_old, log_probs_old = behavior_policy.sample_for_ppo(
+                    global_cond=global_cond
+                )
+                behavior_chunk_action = behavior_policy.flatten_action_chunk(
+                    trajectory_old[-1]
+                )
+                advantages = self.critics.compute_advantage(
+                    obs_features,
+                    behavior_chunk_action,
+                ).detach()
+
+                buffer_item = {
+                    'global_cond': global_cond.detach().cpu(),
+                    'trajectory_old': [traj.detach().cpu() for traj in trajectory_old],
+                    'log_probs_old': [log_prob.detach().cpu() for log_prob in log_probs_old],
+                    'advantages_raw': advantages.detach().cpu(),
+                }
+                if need_obs_cache:
+                    buffer_item['obs'] = dict_apply(obs_dict, lambda x: x.detach().cpu())
+
+                offline_buffer.append(buffer_item)
+                raw_advantages.append(buffer_item['advantages_raw'])
+
+        if not offline_buffer:
+            return [], {
+                'num_batches': 0,
+                'num_samples': 0,
+                'adv_mean': 0.0,
+                'adv_std': 1.0,
+            }
+
+        all_advantages = torch.cat(raw_advantages, dim=0)
+        adv_mean_tensor = all_advantages.mean()
+        adv_std_tensor = all_advantages.std().clamp_min(1e-8)
+
+        for buffer_item in offline_buffer:
+            buffer_item['advantages'] = (
+                buffer_item.pop('advantages_raw') - adv_mean_tensor
+            ) / adv_std_tensor
+
+        total_samples = int(sum(item['advantages'].shape[0] for item in offline_buffer))
+        adv_mean = float(adv_mean_tensor.item())
+        adv_std = float(adv_std_tensor.item())
+        cprint(
+            f"[Offline RL] Fixed PPO buffer ready: {len(offline_buffer)} mini-batches, "
+            f"{total_samples} samples, raw advantage mean={adv_mean:.4f}, std={adv_std:.4f}",
+            "cyan",
+        )
+        return offline_buffer, {
+            'num_batches': float(len(offline_buffer)),
+            'num_samples': float(total_samples),
+            'adv_mean': adv_mean,
+            'adv_std': adv_std,
+        }
+
     def offline_rl_optimize(
         self,
         dataset: BaseDataset,
@@ -969,9 +1062,10 @@ class RL100Trainer:
         Implements paper lines 7-8 of Algorithm 1 (OfflineRL):
           1. Save behavior-policy snapshot for OPE gate
           2. Freeze obs_encoder (paper: "keep ϕIL fixed")
-          3. Normalize advantages (prevent gradient explosion)
-          4. K-step PPO update + Consistency Distillation
-          5. OPE gate: accept update only if AM-Q improves by ≥ δ (paper Eq.20)
+          3. Build a fixed offline PPO buffer under π_i
+          4. Normalize advantages (prevent gradient explosion)
+          5. K-step PPO update + Consistency Distillation
+          6. OPE gate: accept update only if AM-Q improves by ≥ δ (paper Eq.20)
 
         Args:
             dataset: Dataset with (s, a, r, s', done)
@@ -1022,6 +1116,11 @@ class RL100Trainer:
         consistency_snapshot = copy.deepcopy(self.consistency_model.state_dict())
         policy_optimizer_snapshot = copy.deepcopy(self.policy_optimizer.state_dict())
         consistency_optimizer_snapshot = copy.deepcopy(self.consistency_optimizer.state_dict())
+        behavior_policy = copy.deepcopy(self.policy)
+        behavior_policy.to(self.device)
+        behavior_policy.eval()
+        for param in behavior_policy.parameters():
+            param.requires_grad_(False)
 
         # ── Step 2: Freeze encoder (paper: ϕIL is fixed during offline RL) ───────
         for param in self.policy.obs_encoder.parameters():
@@ -1029,15 +1128,30 @@ class RL100Trainer:
 
         self.policy.train()
         self.critics.eval()
-
-        # Create dataloader
-        train_dataloader = DataLoader(
-            dataset,
-            batch_size=config.dataloader.batch_size,
-            shuffle=True,
-            num_workers=config.dataloader.num_workers,
-            pin_memory=True
+        offline_ppo_buffer, offline_buffer_info = self._build_offline_ppo_buffer(
+            dataset=dataset,
+            behavior_policy=behavior_policy,
         )
+        if not offline_ppo_buffer:
+            cprint("[Offline RL] Fixed PPO buffer is empty; skip policy optimization.", "yellow")
+            for param in self.policy.obs_encoder.parameters():
+                param.requires_grad_(True)
+            return {
+                'ppo_loss': 0.0,
+                'approx_kl': 0.0,
+                'clip_frac': 0.0,
+                'mean_ratio': 1.0,
+                'mean_abs_ratio_dev': 0.0,
+                'reg_loss': 0.0,
+                'cd_loss': 0.0,
+            }
+        if config.logging.use_wandb:
+            wandb.log({
+                'offline_buffer/num_batches': offline_buffer_info['num_batches'],
+                'offline_buffer/num_samples': offline_buffer_info['num_samples'],
+                'offline_buffer/adv_mean_raw': offline_buffer_info['adv_mean'],
+                'offline_buffer/adv_std_raw': offline_buffer_info['adv_std'],
+            }, step=self.global_step)
 
         # Number of inner PPO gradient steps per batch (allows ratio to deviate from 1)
         ppo_inner_steps = getattr(config.training, 'ppo_inner_steps', 4)
@@ -1057,26 +1171,25 @@ class RL100Trainer:
             max_ratios = []
             mean_abs_ratio_devs = []
 
-            for batch_idx, batch in enumerate(train_dataloader):
-                batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
-
-                obs_dict = batch['obs']
-
-                # Encode observations (encoder is frozen — no_grad is redundant but explicit)
-                with torch.no_grad():
-                    obs_features, global_cond = self._encode_obs_representations(obs_dict)
-                    naction = self._flatten_normalized_chunk_action(batch['action'])
-
-                    # Compute raw advantage A = Q(s,a) - V(s)
-                    advantages = self.critics.compute_advantage(obs_features, naction)
-
-                # ── Step 3: Normalise advantages (prevent gradient explosion) ─────
-                adv_mean = advantages.mean()
-                adv_std = advantages.std() + 1e-8
-                advantages = (advantages - adv_mean) / adv_std
-
-                # ── Sample old trajectory ONCE per batch (fix old policy) ─────────
-                trajectory_old, log_probs_old = self.policy.sample_for_ppo(global_cond=global_cond)
+            buffer_order = np.random.permutation(len(offline_ppo_buffer))
+            for buffer_idx in buffer_order:
+                buffer_batch = offline_ppo_buffer[int(buffer_idx)]
+                obs_dict = None
+                if 'obs' in buffer_batch:
+                    obs_dict = dict_apply(
+                        buffer_batch['obs'],
+                        lambda x: x.to(self.device, non_blocking=True)
+                    )
+                global_cond = buffer_batch['global_cond'].to(self.device, non_blocking=True)
+                trajectory_old = [
+                    traj.to(self.device, non_blocking=True)
+                    for traj in buffer_batch['trajectory_old']
+                ]
+                log_probs_old = [
+                    log_prob.to(self.device, non_blocking=True)
+                    for log_prob in buffer_batch['log_probs_old']
+                ]
+                advantages = buffer_batch['advantages'].to(self.device, non_blocking=True)
                 run_cd_this_batch = (self.global_step % config.training.cd_every == 0)
                 batch_ppo_losses = []
                 batch_approx_kls = []
@@ -1098,11 +1211,21 @@ class RL100Trainer:
 
                     # Apply consistency distillation at most once per outer batch.
                     total_loss = ppo_loss
-                    reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
-                    if reg_info['total_reg_loss'] > 0:
-                        total_loss = total_loss + reg_loss
-                        reg_losses.append(reg_info['total_reg_loss'])
-                    run_cd_step = run_cd_this_batch and ppo_inner == 0
+                    if obs_dict is not None:
+                        reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
+                        if reg_info['total_reg_loss'] > 0:
+                            total_loss = total_loss + reg_loss
+                            reg_losses.append(reg_info['total_reg_loss'])
+                    else:
+                        reg_info = {
+                            'total_reg_loss': 0.0,
+                        }
+                    run_cd_step = (
+                        obs_dict is not None
+                        and lambda_cd > 0.0
+                        and run_cd_this_batch
+                        and ppo_inner == 0
+                    )
                     if run_cd_step:
                         cd_loss, cd_info = self.consistency_distillation.compute_distillation_loss(
                             obs_dict,
@@ -1313,8 +1436,18 @@ class RL100Trainer:
         if not episodes:
             return np.zeros((0,), dtype=bool)
 
-        merge_success_only = bool(getattr(self.config.runtime, 'merge_success_only', False))
-        if not merge_success_only:
+        il_success_only = getattr(self.config.runtime, 'il_retrain_success_only', None)
+        if il_success_only is None:
+            # Backward compatibility for older configs.
+            il_success_only = getattr(self.config.runtime, 'merge_success_only', False)
+        il_success_only = bool(il_success_only)
+
+        if not il_success_only:
+            cprint(
+                f"[Dataset] {stage}: all {len(episodes)} episodes remain in RL replay; "
+                f"IL retrain also uses all {len(episodes)} episodes.",
+                "cyan",
+            )
             return np.ones(len(episodes), dtype=bool)
 
         il_episode_mask = []
