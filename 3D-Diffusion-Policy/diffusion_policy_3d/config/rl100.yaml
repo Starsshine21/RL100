@@ -1,0 +1,248 @@
+# RL-100 Configuration
+# =====================
+# Configuration for RL-100 training pipeline on 3D-Diffusion-Policy tasks.
+#
+# This config extends the base DP3 config with:
+# - RL100Policy (PPO-enabled diffusion policy)
+# - IQL Critics (Q and V networks)
+# - Consistency Model (fast 1-step generation)
+# - Training loop parameters
+
+defaults:
+  - task: metaworld_push  # Task configuration (metaworld_push, adroit_hammer, etc.)
+  - _self_
+
+name: train_rl100
+task_name: ${task.name}
+shape_meta: ${task.shape_meta}
+exp_name: "debug"
+
+horizon: 16
+n_obs_steps: 2
+n_action_steps: 8
+obs_as_global_cond: true
+
+# ============================================
+# Policy Configuration (RL100Policy)
+# ============================================
+policy:
+  _target_: diffusion_policy_3d.policy.rl100_policy.RL100Policy
+
+  # Architecture (same as DP3)
+  shape_meta: ${shape_meta}
+  horizon: ${horizon}
+  n_obs_steps: ${n_obs_steps}
+  n_action_steps: ${n_action_steps}
+  num_inference_steps: 10  # K=10 denoising steps
+  use_point_crop: true
+  encoder_output_dim: 64
+  diffusion_step_embed_dim: 128
+  down_dims: [512, 1024, 2048]
+  kernel_size: 5
+  n_groups: 8
+  condition_type: film
+  use_pc_color: false
+  pointnet_type: "pointnet"
+  obs_as_global_cond: ${obs_as_global_cond}
+
+  # Noise scheduler (DDIM with epsilon prediction)
+  noise_scheduler:
+    _target_: diffusers.schedulers.scheduling_ddim.DDIMScheduler
+    num_train_timesteps: 100
+    beta_schedule: squaredcos_cap_v2
+    clip_sample: true
+    prediction_type: epsilon  # MUST be epsilon for RL-100
+
+  # PointCloud encoder
+  pointcloud_encoder_cfg:
+    in_channels: 3
+    out_channels: 64
+    use_layernorm: true
+    final_norm: layernorm
+    normal_channel: false
+
+  # VIB (optional)
+  # IMPORTANT: VIB requires the encoder to be trained WITH VIB from scratch (IL phase).
+  # Do NOT enable on a checkpoint trained without VIB — random decoders produce huge
+  # reconstruction loss that destroys the pre-trained policy during IL retraining.
+  # To use VIB: set true AND retrain from demos (do not load after_il.ckpt trained without VIB).
+  use_recon_vib: false
+  beta_recon: 0.0001
+  beta_kl: 0.0001
+
+  # RL-100 specific parameters
+  ppo_clip_eps: 0.2        # PPO clipping threshold ε
+  sigma_min: 0.01          # Minimum exploration std
+  sigma_max: 0.1           # Max exploration std: 0.1 for Meta-World chunk mode (paper tag4), 0.8 for single-step
+  use_variance_clip: true  # Clip variance during sampling
+
+# ============================================
+# IQL Critics Configuration
+# ============================================
+critics:
+  hidden_dims: [256, 256, 256]  # MLP hidden dimensions
+  gamma: 0.9227                  # Effective chunk discount = 0.99^8 (n_action_steps=8)
+                                 # Paper: "equivalent discount factor between chunks is γ^n_c"
+  tau: 0.7                       # Expectile parameter τ for V network
+  target_update_tau: 0.005       # Soft update coefficient for target V
+  reward_scale: 1.0             # Divide chunk reward by this before Q training.
+  reward_type: sparse            # "dense" requires datasets/rollouts with real reward labels; unlabeled demos can only be auto-relabeled in sparse mode
+
+# ============================================
+# Optimizers
+# ============================================
+optimizer:
+  # Policy optimizer
+  policy:
+    _target_: torch.optim.AdamW
+    lr: 1.0e-4
+    weight_decay: 1.0e-6
+    betas: [0.9, 0.999]
+
+  # V network optimizer
+  v_network:
+    _target_: torch.optim.AdamW
+    lr: 3.0e-4
+    weight_decay: 1.0e-6
+
+  # Q network optimizer
+  q_network:
+    _target_: torch.optim.AdamW
+    lr: 3.0e-4
+    weight_decay: 1.0e-6
+
+  # Consistency model optimizer
+  consistency:
+    _target_: torch.optim.AdamW
+    lr: 1.0e-4
+    weight_decay: 1.0e-6
+
+# ============================================
+# EMA Configuration
+# ============================================
+ema:
+  _target_: diffusion_policy_3d.model.diffusion.ema_model.EMAModel
+  power: 0.75
+  max_value: 0.9999
+  min_value: 0.0
+
+# ============================================
+# Data Loading
+# ============================================
+dataloader:
+  batch_size: 256          # Batch size for training
+  num_workers: 8           # Number of dataloader workers
+  shuffle: true
+  pin_memory: true
+  drop_last: false
+  persistent_workers: true
+
+# ============================================
+# Training Configuration
+# ============================================
+training:
+  # General
+  device: cuda:0
+  seed: 42
+  use_ema: true
+
+  # Phase 1: Imitation Learning
+  il_epochs: 1000                    # Initial IL training epochs
+  il_retrain_epochs: 100             # IL retraining epochs after data collection
+  retrain_il_after_collection: true  # Whether to retrain IL after collecting data
+
+  # Phase 2: Offline RL
+  num_offline_iterations: 10          # M iterations of offline RL loop
+  transition_max_epochs: 50          # Reference RL-100 trains transition for 50 epochs / iteration
+  transition_patience: 5             # Early-stop patience for transition training
+  critic_epochs: 20                  # Fallback only when offline_critic_steps is unset
+  offline_critic_steps: 1000         # Reference RL-100 uses 1000 critic updates / iteration
+  ppo_epochs: 3                      # Fallback only when offline_ppo_steps is unset
+  offline_ppo_steps: 1000            # Upper bound for offline PPO updates / iteration
+  offline_ppo_max_passes: 8          # Early offline rounds cap PPO to <= N passes over the fixed PPO buffer
+  ppo_inner_steps: 1                 # Inner PPO gradient steps per batch (keep ratio != 1)
+  collection_episodes: 50            # More rollouts reduce success-rate variance and IL data jitter
+  cd_every: 5                        # Consistency distillation frequency (steps)
+  lambda_cd: 0                     # Paper Eq.22: L_total = L_RL + λ_CD·L_CD
+  rl_policy_lr: 4.0e-6              # Policy LR during RL phase (10x smaller than IL per tag3)
+  ppo_target_kl: 0.5                # Stop PPO early when post-update KL is consistently too large
+  ppo_target_clip_frac: 0.6         # Stop PPO early when most samples are already clipped
+  ppo_early_stop_min_steps: 10      # Ignore early-stop criteria until this many PPO updates are done
+
+  # Phase 3: Online RL
+  run_online_rl: true               # Whether to run online RL fine-tuning
+  online_rl_iterations: 10           # Number of online RL iterations
+  online_collection_episodes: 50     # More rollouts stabilise on-policy success-rate estimates
+  online_value_steps: 200            # Reference RL-100 uses 200 online value updates / iteration
+  online_ppo_steps: 100              # 1000 steps overfits badly on the small online rollout buffer
+  lambda_v: 0.5                      # Value loss weight (paper Eq.21)
+  gae_lambda: 0.95                   # GAE λ parameter
+
+  # Optimization
+  gradient_accumulate_every: 1
+  max_grad_norm: 0.5
+
+  # Logging & Evaluation
+  log_every: 10                      # Log metrics every N steps
+  eval_every: 100                    # Evaluate every N epochs
+  checkpoint_every: 200              # Save checkpoint every N epochs
+
+  # Resume
+  resume: true
+  resume_load_rl_state: false       # For after_il.ckpt, restore only policy/EMA; keep critics/transition/optimizers fresh
+  resume_path: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/after_il.ckpt
+
+# ============================================
+# OPE / AM-Q Gate
+# ============================================
+ope:
+  num_batches: 100                   # Number of initial-state mini-batches used by AM-Q
+  rollout_horizon: 5                # H-step imagined rollout depth for AM-Q / OPE
+  delta_coef: 0.00                  # Accept if J_new - J_old >= 0.03 * |J_old|
+  delta_abs_min: 0.0                # Optional absolute floor for δ
+
+# ============================================
+# Runtime Policy Selection
+# ============================================
+runtime:
+  collection_policy: ddim            # Rollout policy for offline data expansion: ddim or cm
+  collection_use_ema: false          # Use the current policy π_θ for rollout / OPE alignment
+  il_retrain_success_only: true      # Keep failed rollout in RL replay, but do not feed them back into BC by default
+  restore_best_ddim_before_final_eval: true  # Final checkpoint/eval restore the best DDIM score seen during training
+  final_eval_policies: [ddim, cm]    # Evaluate both deployment heads by default
+  final_eval_use_ema: false          # Final eval defaults to current policy unless explicitly overridden
+  eval_policy_mode: ddim             # eval_rl100.py default checkpoint policy mode
+  eval_use_ema: false                # eval_rl100.py defaults to policy weights unless explicitly overridden
+
+# ============================================
+# Checkpoint Configuration
+# ============================================
+checkpoint:
+  save_ckpt: true
+  save_last_ckpt: true
+  save_last_snapshot: false
+
+  topk:
+    monitor_key: test_mean_score
+    mode: max
+    k: 1
+
+# ============================================
+# Logging Configuration
+# ============================================
+logging:
+  use_wandb: false
+  project: rl100-dp3
+  group: ${task.name}
+  name: rl100_${task.name}_seed${training.seed}
+  mode: online  # online, offline, or disabled
+
+# ============================================
+# Hydra Configuration
+# ============================================
+hydra:
+  run:
+    dir: outputs/${logging.name}/${now:%Y-%m-%d}_${now:%H-%M-%S}
+  sweep:
+    dir: outputs/${logging.name}
+    subdir: ${now:%Y-%m-%d}_${now:%H-%M-%S}
