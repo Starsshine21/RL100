@@ -1,200 +1,465 @@
+# RL-100 on 3D-Diffusion-Policy
 
+本仓库是在 [3D Diffusion Policy (DP3)](https://3d-diffusion-policy.github.io) 基础上实现并整理的 **RL-100** 版本，包含：
 
-# <a href="https://3d-diffusion-policy.github.io">3D Diffusion Policy</a>
+- DP3 行为克隆训练与评测
+- RL-100 的 `IL -> Offline RL -> Online RL` 三阶段训练
+- MetaWorld / Adroit / DexArt 演示数据采集脚本
+- DDIM 主策略与 Consistency Model 的评测入口
 
-<a href="https://3d-diffusion-policy.github.io"><strong>Project Page</strong></a>
-  |
-  <a href="https://arxiv.org/abs/2403.03954"><strong>arXiv</strong></a>
-  |
-  <a href="https://x.com/ZeYanjie/status/1765414787775963232?s=20"><strong>Twitter</strong></a> | <a href="https://1drv.ms/u/s!Ag5QsBIFtRnTlFWqYWtS2wMMPKNX?e=dw8hsS"><strong>Data</strong></a>
+论文：
 
-  <a href="https://yanjieze.com/">Yanjie Ze*</a>, 
-  <a href="https://www.gu-zhang.com/">Gu Zhang*</a>, 
-  <a href="https://zkangning.github.io">Kangning Zhang</a>, 
-  <a href="https://github.com/pummmmpkin">Chenyuan Hu</a>, 
-  <a href="https://wang-muhan.github.io/">Muhan Wang</a>, 
-  <a href="http://hxu.rocks/">Huazhe Xu</a>
-
-
-**Robotics: Science and Systems (RSS) 2024**
-
-
-
-
+- DP3: <https://arxiv.org/abs/2403.03954>
+- RL-100: <https://arxiv.org/abs/2510.14830>
 
 <div align="center">
-  <img src="DP3.png" alt="dp3" width="100%">
+  <img src="rl100.png" alt="RL-100 framework" width="100%">
 </div>
 
-**3D Diffusion Policy (DP3)** is a universal visual imitation learning algorithm that marries 3D visual representations with diffusion policies, achieving surprising effectiveness in diverse simulated and real-world tasks, including both high-dimensional and low-dimensional control tasks, with a practical inference speed.
+## 仓库结构
 
-**Small tips for using DP3:**
-- Try [longer prediction horizon](https://github.com/YanjieZe/3D-Diffusion-Policy/blob/b147695af3ecb90101745fe9778ade2f86f23a46/3D-Diffusion-Policy/diffusion_policy_3d/config/dp3.yaml#L10) and [longer action horizon](https://github.com/YanjieZe/3D-Diffusion-Policy/blob/b147695af3ecb90101745fe9778ade2f86f23a46/3D-Diffusion-Policy/diffusion_policy_3d/config/dp3.yaml#L12), e.g., 8/16/32, to get better results.
-- Try to use **global position** instead of relative position as **action space**.
+核心代码位于 [3D-Diffusion-Policy](/home/yrz/RL-100/3D-Diffusion-Policy)：
 
-**Applications and extensions of DP3 from the community**:
-- [arXiv 2025.10](https://lei-kun.github.io/RL-100/), *RL-100: Performant Robotic Manipulation with Real-World Reinforcement Learning*, where DP3 shows 100% manipulation success rate after offline RL and online RL finetuning.
-- [arXiv 2025.09](https://arxiv.org/abs/2509.01819), *ManiFlow: A General Robot Manipulation Policy via Consistency Flow Training*, where DP3 is improved via new backbones and flow matching objective.
-- [arXiv 2025.07](https://arxiv.org/abs/2507.00833), *HumanoidGen: Data Generation for Bimanual Dexterous Manipulation via LLM Reasoning*, where DP3 shows superior performance over DP on bimanual humanoid manipulation tasks in simulation.
-- [arXiv 2025.06](https://arxiv.org/abs/2506.15666), *Vision in Action: Learning Active Perception from Human Demonstrations*, where DP3 serves as a strong baseline in active perception tasks.
-- [arXiv 2025.06](https://arxiv.org/abs/2506.14317), *ClutterDexGrasp: A Sim-to-Real System for General Dexterous Grasping in Cluttered Scenes*, where DP3 shows impressive dex grasping capbilities by distilling an RL teacher policy.
-- [arXiv 2025.05](https://arxiv.org/abs/2505.07819), *H3DP: Triply-Hierarchical Diffusion Policy for Visuomotor Learning*, where DP3 shows significantly better results over DP and DP w/ depth.
-- [arXiv 2025.03](https://arxiv.org/abs/2503.07511), *PointVLA: Injecting the 3D World into Vision-Language-Action Models*, where [iDP3 Encoder](https://github.com/YanjieZe/Improved-3D-Diffusion-Policy) is used in training a powerful 3D VLA.
-- [arXiv 2025.03](https://arxiv.org/abs/2503.08950), *FP3: A 3D Foundation Policy for Robotic Manipulation*, where DP3 shows great generalizability abilities comparable to a large-scale trained 3D policy FP3.
-- [arXiv 2025.02](https://arxiv.org/abs/2502.16932), *DemoGen: Synthetic Demonstration Generation for Data-Efficient Visuomotor Policy Learning*, where DP3 can achieve great real-world abilities with generated demos.
-- [arXiv 2024.11](https://arxiv.org/abs/2411.09658), *Motion Before Action: Diffusing Object Motion as Manipulation Condition*, where DP3 shows improved effectiveness with a Motion-Before-Action module.
-- [arXiv 2024.10](https://arxiv.org/abs/2410.10803), *Generalizable Humanoid Manipulation with 3D Diffusion Policies*, where improved DP3 shows effectiveness in humanoid manipulation tasks and impressive generalization abilities across scenes.
-- [arXiv 2024.09](https://arxiv.org/abs/2409.07163), *Mamba Policy: Towards Efficient 3D Diffusion Policy with Hybrid Selective State Models*, where the backbone of DP3 is replaced with the Mamba archiecture.
-- [arXiv 2024.09](https://arxiv.org/abs/2409.02920), *RoboTwin: Dual-Arm Robot Benchmark with Generative Digital Twins*, where DP3 is well benchmarked on 6 new simulated bimanual tasks.
-- [arXiv 2024.08](https://arxiv.org/abs/2408.11805), *ACE: A Cross-Platform Visual-Exoskeletons System for Low-Cost Dexterous Teleoperation*, where DP3 shows effectiveness in bimanual dexterous tasks.
-- [arXiv 2024.07](https://arxiv.org/abs/2407.03162), *Bunny-VisionPro: Real-Time Bimanual Dexterous Teleoperation for Imitation Learning*, where DP3 shows effectiveness in bimanual long-horizon tasks.
-- [arXiv 2024.07](https://arxiv.org/abs/2407.01479), *EquiBot: SIM(3)-Equivariant Diffusion Policy for Generalizable and Data Efficient Learning*, where DP3 is able to fold clothes with high success rates. 
-- [arXiv 2024.06](https://arxiv.org/abs/2406.01586), *ManiCM: Real-time 3D Diffusion Policy via Consistency Model for Robotic Manipulation*, where DP3 is accelerated via consistency model.
-- [arXiv 2024.03](https://arxiv.org/abs/2403.20328), *Learning Visual Quadrupedal Loco-Manipulation from Demonstrations*, where DP3 is used as the high-level planner.
+- [train_rl100.py](/home/yrz/RL-100/3D-Diffusion-Policy/train_rl100.py)：RL-100 训练入口
+- [eval_rl100.py](/home/yrz/RL-100/3D-Diffusion-Policy/eval_rl100.py)：RL-100 单 checkpoint 评测入口
+- [rl100.yaml](/home/yrz/RL-100/3D-Diffusion-Policy/diffusion_policy_3d/config/rl100.yaml)：RL-100 主配置
+- [config/task](/home/yrz/RL-100/3D-Diffusion-Policy/diffusion_policy_3d/config/task)：各任务配置
+- [scripts](/home/yrz/RL-100/scripts)：数据采集、DP3 训练与评测脚本
 
+## 环境安装
 
+环境配置 **直接沿用 DP3**，这里没有额外改动。
 
+- 安装说明见 [INSTALL.md](/home/yrz/RL-100/INSTALL.md)
+- 常见报错见 [ERROR_CATCH.md](/home/yrz/RL-100/ERROR_CATCH.md)
 
+如果你已经能正常跑 DP3，就可以直接跑 RL-100。
 
-# 📊 Benchmark of DP3
+## 数据采集
 
-**Simulation environments.** We provide dexterous manipulation environments and expert policies for `Adroit`, `DexArt`, and `MetaWorld` in this codebase (3+4+50=57 tasks in total). the 3D modality generation (depths and point clouds) has been incorporated for these environments.
+所有演示数据默认写入 [3D-Diffusion-Policy/data](/home/yrz/RL-100/3D-Diffusion-Policy/data)。
 
-**Real-world robot data** is also provided [here](https://drive.google.com/file/d/1G5MP6Nzykku9sDDdzy7tlRqMBnKb253O/view?usp=sharing).
+### MetaWorld
 
+脚本： [gen_demonstration_metaworld.sh](/home/yrz/RL-100/scripts/gen_demonstration_metaworld.sh)
 
-**Algorithms**. We provide the implementation of the following algorithms: 
-- DP3: `dp3.yaml`
-- Simple DP3: `simple_dp3.yaml`
-
-Among these, `dp3.yaml` is the proposed algorithm in our paper, showing a significant improvement over the baselines. During training, DP3 takes ~10G gpu memory and ~3 hours on an Nvidia A40 gpu, thus it is feasible for most researchers.
-
-`simple_dp3.yaml` is a simplified version of DP3, which is much faster in training (1~2 hour) and inference (**25 FPS**) , without much performance loss, thus it is more recommended for robotics researchers.
-
-# 💻 Installation
-
-See [INSTALL.md](INSTALL.md) for installation instructions. 
-
-See [ERROR_CATCH.md](ERROR_CATCH.md) for error catching I personally encountered during installation.
-
-# 📚 Data
-You could generate demonstrations by yourself using our provided expert policies.  Generated demonstrations are under `$YOUR_REPO_PATH/3D-Diffusion-Policy/data/`.
-- Download Adroit RL experts from [OneDrive](https://1drv.ms/u/s!Ag5QsBIFtRnTlFWqYWtS2wMMPKNX?e=dw8hsS) or [GoogleDrive](https://drive.google.com/file/d/1iNkSrLD_N4NrezLx58L1YoBBqYYg-33u/view?usp=sharing), unzip it, and put the `ckpts` folder under `$YOUR_REPO_PATH/third_party/VRL3/`.
-- Download DexArt assets from [Google Drive](https://drive.google.com/file/d/1DxRfB4087PeM3Aejd6cR-RQVgOKdNrL4/view?usp=sharing) and put the `assets` folder under `$YOUR_REPO_PATH/third_party/dexart-release/`.
-
-
-**Note**: since you are generating demonstrations by yourselves, the results could be slightly different from the results reported in the paper. This is normal since the results of imitation learning highly depend on the demonstration quality. **Please re-generate demonstrations if you encounter some bad demonstrations** and **no need to open a new issue**.
-
-# 🛠️ Usage
-Scripts for generating demonstrations, training, and evaluation are all provided in the `scripts/` folder. 
-
-The results are logged by `wandb`, so you need to `wandb login` first to see the results and videos.
-
-For more detailed arguments, please refer to the scripts and the code. We here provide a simple instruction for using the codebase.
-
-1. Generate demonstrations by `gen_demonstration_adroit.sh` and `gen_demonstration_dexart.sh`. See the scripts for details. For example:
-    ```bash
-    bash scripts/gen_demonstration_adroit.sh hammer
-    ```
-    This will generate demonstrations for the `hammer` task in Adroit environment. The data will be saved in `3D-Diffusion-Policy/data/` folder automatically.
-
-
-2. Train and evaluate a policy with behavior cloning. For example:
-    ```bash
-    bash scripts/train_policy.sh dp3 adroit_hammer 0112 0 0
-    ```
-    This will train a DP3 policy on the `hammer` task in Adroit environment using point cloud modality. By default we **save** the ckpt (optional in the script).
-
-
-3. Evaluate a saved policy or use it for inference. Please set  For example:
-    ```bash
-    bash scripts/eval_policy.sh dp3 adroit_hammer 0112 0 0
-    ```
-    This will evaluate the saved DP3 policy you just trained. **Note: the evaluation script is only provided for deployment/inference. For benchmarking, please use the results logged in wandb during training.**
-
-# 🤖 Real Robot
-
-**Hardware Setup**
-1. Franka Robot
-2. Allegro Hand
-3. **L515** Realsense Camera (**Note: using the RealSense D435 camera might lead to failure of DP3 due to the very low quality of point clouds**)
-4. Mounted connection base [[link](https://drive.google.com/file/d/1kg6yOFxVqP8azxPoXsuyig5DEQnAJjwC/view?usp=sharing)] (connect Franka with Allegro hand)
-5. Mounted finger tip [[link](https://github.com/yzqin/dexpoint-release/blob/main/assets/robot/allegro_hand_description/meshes/modified_tip.STL)]
-
-**Software**
-1. Ubuntu 20.04.01 (tested)
-2. [Franka Interface Control](https://frankaemika.github.io/docs/index.html) 
-3. [Frankx](https://github.com/pantor/frankx) (High-Level Motion Library for the Franka Emika Robot)
-4. [Allegro Hand Controller - Noetic](https://github.com/NYU-robot-learning/Allegro-Hand-Controller-DIME)
-
-
-Every collected real robot demonstration (episode length: T) is a dictionary:
-1. "point_cloud": Array of shape (T, Np, 6), Np is the number of point clouds, 6 denotes [x, y, z, r, g, b]. **Note: it is highly suggested to crop out the table/background and only leave the useful point clouds in your observation, which demonstrates effectiveness in our real-world experiments.**
-2. "image": Array of shape (T, H, W, 3)
-3. "depth": Array of shape (T, H, W)
-4. "agent_pos": Array of shape (T, Nd), Nd is the action dim of the robot agent, i.e. 22 for our dexhand tasks (6d position of end effector + 16d joint position)
-5. "action": Array of shape (T, Nd). We use *relative end-effector position control* for the robot arm and *relative joint-angle position control* for the dex hand.
-
-For training and evaluation, you should process the point clouds (cropping using a bounding box and FPS downsampling) as described in the paper. We also provide an example script ([here](https://github.com/YanjieZe/3D-Diffusion-Policy/tree/master/scripts/convert_real_robot_data.py)). 
-
-You can try using our provided real world data to train the policy.
-1. Download the real robot data. Put the data under `3D-Diffusion-Policy/data/` folder, e.g. `3D-Diffusion-Policy/data/realdex_drill.zarr`, please keep the path the same as 'zarr_path' in the task's yaml file.
-2. Train the policy. For example:
-  ```bash
-    bash scripts/train_policy.sh dp3 realdex_drill 0112 0 0
-  ```
-3. For real-world deployment code, you might refer to [iDP3](https://github.com/YanjieZe/Improved-3D-Diffusion-Policy) for a reference.
-   
-# 🔍 Visualizer
-We provide a simple visualizer to visualize point clouds for the convenience of debugging in headless machines. You could install it by
 ```bash
-cd visualizer
-pip install -e .
+bash scripts/gen_demonstration_metaworld.sh dial-turn
+bash scripts/gen_demonstration_metaworld.sh basketball sparse
+bash scripts/gen_demonstration_metaworld.sh push dense
 ```
-Then you could visualize point clouds by
-```python
-import visualizer
-your_pointcloud = ... # your point cloud data, numpy array with shape (N, 3) or (N, 6)
-visualizer.visualize_pointcloud(your_pointcloud)
+
+说明：
+
+- 第一个参数是 MetaWorld 任务名
+- 第二个参数是奖励类型，默认 `sparse`
+- 当前脚本固定采集 `100` 个 episode
+
+### Adroit
+
+脚本： [gen_demonstration_adroit.sh](/home/yrz/RL-100/scripts/gen_demonstration_adroit.sh)
+
+```bash
+bash scripts/gen_demonstration_adroit.sh door
+bash scripts/gen_demonstration_adroit.sh hammer
+bash scripts/gen_demonstration_adroit.sh pen
 ```
-This will show the point cloud in a web browser.
 
+说明：
 
-# 🦾 Run On Your Own Tasks
-The good part of DP3 is its universality, so that you could easily run DP3 on your own tasks. What you need to add is to make this codebase support the task in our format. Here are some simple steps:
+- 当前脚本固定采集 `10` 个 episode
+- 依赖 `third_party/VRL3/ckpts/` 下的 expert checkpoint
 
+### DexArt
 
-1. Write the environment wrapper for your task. You need to write a wrapper for your environment, to make the environment interface easy to use. See `3D-Diffusion-Policy/diffusion_policy_3d/env/adroit` for an example.
+脚本： [gen_demonstration_dexart.sh](/home/yrz/RL-100/scripts/gen_demonstration_dexart.sh)
 
-
-2. Add the environment runner for your task. See `3D-Diffusion-Policy/diffusion_policy_3d/env_runner/` for examples.
-
-3. Prepare expert data for your task. The script `third_party/VRL3/src/gen_demonstration.py` is a good example of how to generate demonstrations in our format. Basically expert data is the state-action pairs saved in a sequence.
-
-4. Add the dataset which loads your data. See `3D-Diffusion-Policy/diffusion_policy_3d/dataset/` for examples.
-
-5. Add the config file in `3D-Diffusion-Policy/diffusion_policy_3d/configs/task`. There have been many examples in the folder.
-
-6. Train and evaluate DP3 on your task. See `3D-Diffusion-Policy/scripts/train_policy.sh` for examples.
-
-
-
-# 🏷️ License
-This repository is released under the MIT license. See [LICENSE](LICENSE) for additional details.
-
-# 😺 Acknowledgement
-Our code is generally built upon: [Diffusion Policy](https://github.com/real-stanford/diffusion_policy), [DexMV](https://github.com/yzqin/dexmv-sim), [DexArt](https://github.com/Kami-code/dexart-release), [VRL3](https://github.com/microsoft/VRL3), [DAPG](https://github.com/aravindr93/hand_dapg), [DexDeform](https://github.com/sizhe-li/DexDeform), [RL3D](https://github.com/YanjieZe/rl3d), [GNFactor](https://github.com/YanjieZe/GNFactor), [H-InDex](https://github.com/YanjieZe/H-InDex), [MetaWorld](https://github.com/Farama-Foundation/Metaworld), [BEE](https://jity16.github.io/BEE/), [Bi-DexHands](https://github.com/PKU-MARL/DexterousHands), [HORA](https://github.com/HaozhiQi/hora). We thank all these authors for their nicely open sourced code and their great contributions to the community.
-
-Contact [Yanjie Ze](https://yanjieze.com) if you have any questions or suggestions.
-
-# 📝 Citation
-
-If you find our work useful, please consider citing:
+```bash
+bash scripts/gen_demonstration_dexart.sh laptop
+bash scripts/gen_demonstration_dexart.sh faucet
+bash scripts/gen_demonstration_dexart.sh bucket
+bash scripts/gen_demonstration_dexart.sh toilet
 ```
+
+说明：
+
+- 当前脚本固定采集 `100` 个 episode
+- 依赖 `third_party/dexart-release/assets/rl_checkpoints/`
+
+### 真机 HDF5 转 zarr
+
+如果你的真机演示数据是：
+
+- `data/action`: `(K, 13)`
+- `data/right_state`: `(K, 13)`
+- `data/rgbm`: `(K, H, W, 4)`
+- `data/right_cam_img`: `(K, H, W, 3)`
+- `meta/episode_ends`: `(J,)`
+
+可以直接转换成 RL-100 训练用 zarr：
+
+```bash
+python scripts/convert_real_robot_hdf5_to_zarr.py \
+  --input /path/to/real_robot_demo.hdf5 \
+  --output 3D-Diffusion-Policy/data/realrobot_dualcam13dof.zarr \
+  --overwrite
+```
+
+默认会把 `rgbm` 和 `right_cam_img` resize 到 `84x84`，并把 RGB 归一化到 `[0, 1]`。  
+如果你想保留原分辨率，可以把 `--resize-height` 和 `--resize-width` 设成 `0`。
+
+## DP3 基线训练与评测
+
+如果你只想跑原始 DP3 行为克隆流程，可以继续用原脚本。
+
+### 训练
+
+脚本： [train_policy.sh](/home/yrz/RL-100/scripts/train_policy.sh)
+
+```bash
+bash scripts/train_policy.sh dp3 metaworld_dial-turn exp1 0 0
+bash scripts/train_policy.sh dp3 adroit_hammer exp1 0 0
+bash scripts/train_policy.sh simple_dp3 dexart_laptop exp1 0 0
+```
+
+参数顺序：
+
+1. 算法名：`dp3` 或 `simple_dp3`
+2. 任务名：例如 `metaworld_dial-turn`
+3. 附加字符串：用于组成实验名
+4. 随机种子
+5. GPU id
+
+### 评测
+
+脚本： [eval_policy.sh](/home/yrz/RL-100/scripts/eval_policy.sh)
+
+```bash
+bash scripts/eval_policy.sh dp3 metaworld_dial-turn exp1 0 0
+```
+
+## RL-100 训练
+
+RL-100 不走 shell 脚本，直接用 Hydra 入口。
+
+先进入项目目录：
+
+```bash
+cd 3D-Diffusion-Policy
+```
+
+### 基本训练
+
+```bash
+python train_rl100.py task=metaworld_dial-turn
+```
+
+### 真机任务配置
+
+仓库新增了一个真机模板任务：
+
+- [realrobot_dualcam13dof.yaml](/home/yrz/RL-100/3D-Diffusion-Policy/diffusion_policy_3d/config/task/realrobot_dualcam13dof.yaml)
+
+它默认使用：
+
+- `right_state` 作为低维 proprio 输入
+- `rgbm` 作为头相机 `4` 通道输入
+- `right_cam_img` 作为腕部相机 `3` 通道输入
+- `action` 维度 `13`
+- `task.execution.enable_eval=false`，训练过程中不做真机 eval
+- `task.execution.enable_amq=false`，offline RL 跳过 AM-Q / OPE gate
+- `task.execution.enable_cm_policy=false`，禁用 consistency-model runtime policy
+- `task.execution.stop_env_on_keyboard_interrupt=true`，`Ctrl+C` 时对 env 做 best-effort stop
+
+如果只想先验证离线 IL，可直接关掉 rollout 阶段：
+
+```bash
+cd 3D-Diffusion-Policy
+
+python train_rl100.py \
+  task=realrobot_dualcam13dof \
+  training.num_offline_iterations=0 \
+  training.run_online_rl=false
+```
+
+如果要跑真机 offline-collection / online RL，需要在配置里给 `task.env_runner.env` 提供真实机器人环境：
+
+```bash
+python train_rl100.py \
+  task=realrobot_dualcam13dof \
+  task.env_runner.env._target_=your_robot_pkg.envs.YourRealRobotEnv
+```
+
+如果你之后想显式打开真机评测或 `cm`，可以在命令行覆盖：
+
+```bash
+python train_rl100.py \
+  task=realrobot_dualcam13dof \
+  task.execution.enable_eval=true \
+  task.execution.enable_cm_policy=true
+```
+
+这个 env 需要至少提供：
+
+- `reset() -> obs_dict` 或 `(obs_dict, info)`
+- `step(action) -> obs_dict`
+- `step(action) -> (obs_dict, info)`
+- `step(action) -> (obs_dict, reward, done, info)`
+- `step(action) -> (obs_dict, reward, terminated, truncated, info)`
+
+其中 `obs_dict` 的 key 需要和 task 配置一致，例如：
+
+- `right_state`
+- `rgbm`
+- `right_cam_img`
+
+### 常见覆盖写法
+
+```bash
+python train_rl100.py \
+  task=metaworld_dial-turn \
+  training.seed=0 \
+  training.device=cuda:0 \
+  logging.use_wandb=true \
+  task.env_runner.eval_episodes=100
+```
+
+### 指定从某个 checkpoint 恢复
+
+```bash
+python train_rl100.py \
+  task=metaworld_dial-turn \
+  training.resume=true \
+  training.resume_path=/path/to/checkpoints/after_il.ckpt
+```
+
+### 训练阶段
+
+`train_rl100.py` 默认执行以下流程：
+
+1. `IL`：先用 demonstration 训练 DP3/RL100 policy
+2. `Offline RL`：训练 transition model、IQL critics、offline PPO，并做 OPE gate
+3. `Data Collection + IL Retrain`：收集新轨迹并并回数据集，再做 IL retrain
+4. `Online RL`：对 fresh rollout 做 on-policy PPO + GAE
+5. `Final Eval`：按配置评测 `ddim` 和/或 `cm`
+
+相关主配置见 [rl100.yaml](/home/yrz/RL-100/3D-Diffusion-Policy/diffusion_policy_3d/config/rl100.yaml)。
+
+## RL-100 评测
+
+脚本入口： [eval_rl100.py](/home/yrz/RL-100/3D-Diffusion-Policy/eval_rl100.py)
+
+### 评测主模型 DDIM
+
+```bash
+python eval_rl100.py \
+  task=metaworld_dial-turn \
+  checkpoint_path=/path/to/checkpoints/final.ckpt \
+  runtime.eval_policy_mode=ddim \
+  runtime.eval_use_ema=false \
+  task.env_runner.eval_episodes=100
+```
+
+### 评测 EMA-DDIM
+
+```bash
+python eval_rl100.py \
+  task=metaworld_dial-turn \
+  checkpoint_path=/path/to/checkpoints/final.ckpt \
+  runtime.eval_policy_mode=ddim \
+  runtime.eval_use_ema=true \
+  task.env_runner.eval_episodes=100
+```
+
+### 评测 Consistency Model
+
+```bash
+python eval_rl100.py \
+  task=metaworld_dial-turn \
+  checkpoint_path=/path/to/checkpoints/final.ckpt \
+  runtime.eval_policy_mode=cm \
+  runtime.eval_use_ema=true \
+  task.env_runner.eval_episodes=100
+```
+
+## 输出内容
+
+训练输出目录由 Hydra 管理，默认在：
+
+```bash
+3D-Diffusion-Policy/outputs/rl100_<task>_seed<seed>/<date>_<time>/
+```
+
+其中通常包含：
+
+- `checkpoints/after_il.ckpt`
+- `checkpoints/offline_iter_<N>.ckpt`
+- `checkpoints/online_iter_<N>.ckpt`
+- `checkpoints/final.ckpt`
+- `plots/` 下的各类 loss / success 曲线
+
+## 重要配置项
+
+常用项基本都在 [rl100.yaml](/home/yrz/RL-100/3D-Diffusion-Policy/diffusion_policy_3d/config/rl100.yaml)：
+
+- `training.num_offline_iterations`
+- `training.critic_epochs`
+- `training.ppo_epochs`
+- `training.ppo_inner_steps`
+- `training.collection_episodes`
+- `training.online_rl_iterations`
+- `training.online_collection_episodes`
+- `training.rl_policy_lr`
+- `runtime.collection_policy`
+- `runtime.collection_use_ema`
+- `runtime.il_retrain_success_only`
+- `runtime.final_eval_policies`
+- `runtime.final_eval_use_ema`
+- `task.env_runner.eval_episodes`
+
+任务数据路径、观测维度、评测 episode 数在各自 task yaml 里定义，例如：
+
+- [metaworld_dial-turn.yaml](/home/yrz/RL-100/3D-Diffusion-Policy/diffusion_policy_3d/config/task/metaworld_dial-turn.yaml)
+
+## 注意事项
+
+### 1. `eval_episodes` 以 task yaml 为准
+
+最终训练评测和 `eval_rl100.py` 都直接读取 `task.env_runner.eval_episodes`。  
+如果要改评测轮数，改 task yaml 或在命令行覆盖：
+
+```bash
+python train_rl100.py task=metaworld_dial-turn task.env_runner.eval_episodes=100
+```
+
+### 2. `il_retrain_success_only` 只影响 IL retrain，不影响 RL 本身
+
+当前逻辑是：
+
+- offline RL / online RL 都使用完整采样轨迹，包括失败轨迹
+- `success-only` 只作用于后续 `IL retrain` 的数据筛选
+
+这和 RL 训练、IL 重训的语义已经拆开了。
+
+### 3. `prediction_type` 必须是 `epsilon`
+
+RL-100 的 PPO ratio 计算依赖 `epsilon` 参数化。当前配置已固定为：
+
+```yaml
+policy:
+  noise_scheduler:
+    prediction_type: epsilon
+```
+
+不要改成 `sample`。
+
+### 4. `sigma_max` 的值
+
+根据 RL-100 论文 `2510.14830 v4` 的消融结论，stochastic DDIM 的标准差上界需要按控制模式区分：
+
+- `sigma_max = 0.8`
+  - Adroit
+  - Mujoco locomotion
+  - 真机单步控制任务
+- `sigma_max = 0.1`
+  - MetaWorld
+  - 真机 chunk-action 控制任务
+
+仓库当前默认：
+
+```yaml
+policy:
+  sigma_max: 0.1
+```
+
+这适合 MetaWorld / chunk-action。  
+如果你做真机单步控制，应该按论文建议改到 `0.8`。
+
+### 5. `reward_type=dense` 只能用于真的有 dense reward 标签的数据
+
+当前 MetaWorld 演示脚本默认是：
+
+```bash
+bash scripts/gen_demonstration_metaworld.sh <task> sparse
+```
+
+如果你要跑 `dense`，需要保证：
+
+- 采集脚本真的生成了 dense reward
+- 配置里的 `critics.reward_type` 与数据一致
+
+不要拿 sparse 数据去伪装 dense reward。
+
+### 5.1 真机 sparse reward / episode 结束建议
+
+RL-100 论文里的真机 rollout 本身就是“人工给 sparse success signal”；仓库里的真机 runner 也按这个思路实现了。默认真机模板配置是：
+
+- `task.env_runner.reward_mode=terminal_sparse_manual`
+- `task.env_runner.episode_end_mode=env_or_manual_or_max_steps`
+
+也就是：
+
+- 每个 episode 的中间步 reward 默认全是 `0`
+- episode 结束时，如果人工标记成功，则终止步 reward=`1`
+- 如果人工标记失败，则终止步 reward=`0`
+- episode 可以由 env 自己结束、达到 `max_steps` 结束，或者每个 action chunk 后人工决定 `continue/success/failure`
+
+这更接近主流真机 RL 在“没有可靠 success classifier 时”的做法。  
+如果你之后接入了自动 success classifier / 自动 reset 逻辑，可以切到：
+
+- `task.env_runner.reward_mode=terminal_sparse_env_success`
+- `task.env_runner.episode_end_mode=env_or_max_steps`
+
+### 6. `use_recon_vib=true` 时要从头训
+
+如果 checkpoint 不是用 Recon/VIB 训练出来的，不要直接在中途打开：
+
+```yaml
+policy:
+  use_recon_vib: true
+```
+
+这会把随机初始化的 decoder/VIB 分支引进来，破坏已有 policy。  
+如果要用，应该从 demonstration 开始重新训练。
+
+### 7. EMA 与主模型不是一回事
+
+- 训练时真正反向更新的是主模型 `policy`
+- `ema_policy` 是主模型参数的指数滑动平均
+- 最终评测是否用 EMA，取决于：
+  - `runtime.final_eval_use_ema`
+  - `runtime.eval_use_ema`
+
+### 8. WandB 不是必须的
+
+如果不想用 WandB，直接在配置里关掉：
+
+```bash
+python train_rl100.py task=metaworld_dial-turn logging.use_wandb=false
+```
+
+## 参考文档
+
+- RL-100 代码说明： [RL100_README.md](/home/yrz/RL-100/3D-Diffusion-Policy/RL100_README.md)
+- DP3 安装说明： [INSTALL.md](/home/yrz/RL-100/INSTALL.md)
+- 安装踩坑记录： [ERROR_CATCH.md](/home/yrz/RL-100/ERROR_CATCH.md)
+
+## Citation
+
+如果这个仓库对你有帮助，可以引用：
+
+```bibtex
 @inproceedings{Ze2024DP3,
-	title={3D Diffusion Policy: Generalizable Visuomotor Policy Learning via Simple 3D Representations},
-	author={Yanjie Ze and Gu Zhang and Kangning Zhang and Chenyuan Hu and Muhan Wang and Huazhe Xu},
-	booktitle={Proceedings of Robotics: Science and Systems (RSS)},
-	year={2024}
+  title={3D Diffusion Policy: Generalizable Visuomotor Policy Learning via Simple 3D Representations},
+  author={Yanjie Ze and Gu Zhang and Kangning Zhang and Chenyuan Hu and Muhan Wang and Huazhe Xu},
+  booktitle={Proceedings of Robotics: Science and Systems (RSS)},
+  year={2024}
+}
+
+@article{lei2025rl100,
+  title={RL-100: Performant Robotic Manipulation with Real-World Reinforcement Learning},
+  author={Lei, Kun and Li, Huanyu and Yu, Dongjie and Wei, Zhenyu and Guo, Lingxiao and Jiang, Zhennan and Wang, Ziyu and Liang, Shiyu and Xu, Huazhe},
+  journal={arXiv preprint arXiv:2510.14830},
+  year={2025}
 }
 ```
