@@ -40,10 +40,19 @@ policy:
   down_dims: [512, 1024, 2048]
   kernel_size: 5
   n_groups: 8
+  crop_shape: null
   condition_type: film
   use_pc_color: false
   pointnet_type: "pointnet"
   obs_as_global_cond: ${obs_as_global_cond}
+  generative_mode: diffusion       # diffusion or flow_matching
+  flow_sampling_steps: 10          # Used when generative_mode=flow_matching
+  rgb_encoder_type: simple         # simple or dp_resnet
+  rgb_encoder_cfg:
+    crop_shape: null
+    stage_channels: [32, 64, 128, 256]
+    blocks_per_stage: 2
+    use_group_norm: true
 
   # Noise scheduler (DDIM with epsilon prediction)
   noise_scheduler:
@@ -80,13 +89,33 @@ policy:
 # IQL Critics Configuration
 # ============================================
 critics:
-  hidden_dims: [256, 256, 256]  # MLP hidden dimensions
+  hidden_dims: [256, 256, 256]   # Legacy fallback when q_hidden_dims / v_hidden_dims are unset
+  q_hidden_dims: [1024, 1024]    # Uni-O4 Q default: hidden_dim=1024, depth=2
+  v_hidden_dims: [512, 512, 512] # Uni-O4 V default: hidden_dim=512, depth=3
+  activation: relu               # Uni-O4 critic MLPs use plain ReLU
+  use_layernorm: false           # Uni-O4 critic MLPs do not use LayerNorm
+  dropout: 0.0
   gamma: 0.9227                  # Effective chunk discount = 0.99^8 (n_action_steps=8)
                                  # Paper: "equivalent discount factor between chunks is γ^n_c"
   tau: 0.7                       # Expectile parameter τ for V network
   target_update_tau: 0.005       # Soft update coefficient for target V
   reward_scale: 1.0             # Divide chunk reward by this before Q training.
   reward_type: sparse            # "dense" requires datasets/rollouts with real reward labels; unlabeled demos can only be auto-relabeled in sparse mode
+
+# ============================================
+# Uni-O4-Style Transition Model Configuration
+# ============================================
+transition:
+  preset: uni_o4_adroit_like       # Manipulation tasks in Uni-O4 use the adroit-style dynamics setting
+  hidden_dims: [400, 400, 400, 400]
+  weight_decays: [2.5e-5, 5.0e-5, 7.5e-5, 7.5e-5, 1.0e-4]
+  lr: 3.0e-4
+  num_ensemble: 7
+  num_elites: 5
+  max_epochs: 200
+  max_epochs_since_update: 10
+  holdout_ratio: 0.2
+  logvar_loss_coef: 0.01
 
 # ============================================
 # Optimizers
@@ -101,15 +130,13 @@ optimizer:
 
   # V network optimizer
   v_network:
-    _target_: torch.optim.AdamW
-    lr: 3.0e-4
-    weight_decay: 1.0e-6
+    _target_: torch.optim.Adam
+    lr: 1.0e-4
 
   # Q network optimizer
   q_network:
-    _target_: torch.optim.AdamW
-    lr: 3.0e-4
-    weight_decay: 1.0e-6
+    _target_: torch.optim.Adam
+    lr: 1.0e-4
 
   # Consistency model optimizer
   consistency:
@@ -145,27 +172,38 @@ training:
   device: cuda:0
   seed: 42
   use_ema: true
+  offline_policy_backend: ppo      # ppo (RL100) or qam
 
   # Phase 1: Imitation Learning
   il_epochs: 1000                    # Initial IL training epochs
-  il_retrain_epochs: 100             # IL retraining epochs after data collection
+  il_retrain_epochs: 150             # IL retraining epochs after data collection
   retrain_il_after_collection: true  # Whether to retrain IL after collecting data
 
   # Phase 2: Offline RL
-  num_offline_iterations: 10          # M iterations of offline RL loop
-  critic_epochs: 20                  # With reward_scale=10 Q_loss converges by epoch 30-35;
-                                     # training beyond that causes bootstrapping drift (Q 40x overestimated)
-  ppo_epochs: 3                    # Epochs to optimize policy with PPO
+  num_offline_iterations: 20          # M iterations of offline RL loop
+  offline_collect_new_data: true      # Disable to run offline RL on a fixed dataset without rollout / merge
+  transition_max_epochs: 50          # Legacy fallback; prefer transition.max_epochs above
+  transition_patience: 5             # Legacy fallback; prefer transition.max_epochs_since_update above
+  critic_epochs: 20                  # Fallback only when offline_critic_steps is unset
+  offline_critic_steps: 5000         # Still below Uni-O4's multi-million updates, but no longer obviously under-trained
+  ppo_epochs: 3                      # Fallback only when offline_ppo_steps is unset
+  offline_ppo_steps: 2000            # Upper bound for offline PPO updates / iteration
+  offline_ppo_max_passes: 8          # Early offline rounds cap PPO to <= N passes over the fixed PPO buffer
   ppo_inner_steps: 1                 # Inner PPO gradient steps per batch (keep ratio != 1)
-  collection_episodes: 20            # Episodes to collect per iteration
+  collection_episodes: 50            # More rollouts reduce success-rate variance and IL data jitter
   cd_every: 5                        # Consistency distillation frequency (steps)
   lambda_cd: 0                     # Paper Eq.22: L_total = L_RL + λ_CD·L_CD
-  rl_policy_lr: 1.0e-5              # Policy LR during RL phase (10x smaller than IL per tag3)
+  rl_policy_lr: 4.0e-6              # Policy LR during RL phase (10x smaller than IL per tag3)
+  ppo_target_kl: 0.5                # Stop PPO early when post-update KL is consistently too large
+  ppo_target_clip_frac: 0.6         # Stop PPO early when most samples are already clipped
+  ppo_early_stop_min_steps: 10      # Ignore early-stop criteria until this many PPO updates are done
 
   # Phase 3: Online RL
   run_online_rl: true               # Whether to run online RL fine-tuning
   online_rl_iterations: 10           # Number of online RL iterations
-  online_collection_episodes: 20     # Episodes per online iteration
+  online_collection_episodes: 50     # More rollouts stabilise on-policy success-rate estimates
+  online_value_steps: 200            # Reference RL-100 uses 200 online value updates / iteration
+  online_ppo_steps: 100              # 1000 steps overfits badly on the small online rollout buffer
   lambda_v: 0.5                      # Value loss weight (paper Eq.21)
   gae_lambda: 0.95                   # GAE λ parameter
 
@@ -175,34 +213,58 @@ training:
 
   # Logging & Evaluation
   log_every: 10                      # Log metrics every N steps
+  console_log_every: 100             # Print local console progress every N training batches; <=0 disables
   eval_every: 100                    # Evaluate every N epochs
   checkpoint_every: 200              # Save checkpoint every N epochs
 
   # Resume
   resume: true
+  resume_il: false                 # True: continue Phase-1 IL from a checkpoint instead of skipping to RL
+  resume_load_rl_state: false       # For after_il.ckpt, restore only policy/EMA; keep critics/transition/optimizers fresh
   resume_path: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/after_il.ckpt
+
+# ============================================
+# QAM Configuration
+# ============================================
+qam:
+  hidden_dims: [1024, 1024]
+  num_qs: 10
+  rho: 0.5
+  discount: ${critics.gamma}
+  tau: 0.005
+  flow_steps: ${policy.flow_sampling_steps}
+  inv_temp: 1.0
+  bc_loss_weight: 1.0
+  adj_loss_weight: 1.0
+  best_of_n: 1
+  clip_adj: true
+  use_target_grad: true
+  clip_sampled_actions: true
+  use_layernorm: false
+  dropout: 0.0
+  activation: relu
 
 # ============================================
 # OPE / AM-Q Gate
 # ============================================
 ope:
   num_batches: 100                   # Number of initial-state mini-batches used by AM-Q
-  rollout_horizon: 3                # H-step imagined rollout depth for AM-Q / OPE
-  delta_coef: 0.01                  # Accept if J_new - J_old >= 0.03 * |J_old|
+  rollout_horizon: 1                # Uni-O4 manipulation defaults use 1-step model rollout for OPE / planning
+  delta_coef: 0.00                  # Accept if J_new - J_old >= 0.03 * |J_old|
   delta_abs_min: 0.0                # Optional absolute floor for δ
 
 # ============================================
 # Runtime Policy Selection
 # ============================================
 runtime:
-  collection_policy: ddim            # Rollout policy for offline data expansion: ddim or cm
+  collection_policy: policy          # Rollout policy for offline data expansion: policy/base/flow/fm/ddim or cm
   collection_use_ema: false          # Use the current policy π_θ for rollout / OPE alignment
-  il_retrain_success_only: true      # If true, IL retrain uses only successful rollout episodes; if false, IL also uses all merged episodes
-  merge_success_only: true           # Deprecated alias for il_retrain_success_only; kept for backward compatibility
+  il_retrain_success_only: true      # Keep failed rollout in RL replay, but do not feed them back into BC by default
+  restore_best_ddim_before_final_eval: true  # Final checkpoint/eval restore the best DDIM score seen during training
   final_eval_policies: [ddim, cm]    # Evaluate both deployment heads by default
-  final_eval_use_ema: true          # Final eval defaults to current policy unless explicitly overridden
-  eval_policy_mode: ddim             # eval_rl100.py default checkpoint policy mode
-  eval_use_ema: true                # eval_rl100.py defaults to policy weights unless explicitly overridden
+  final_eval_use_ema: false          # Final eval defaults to current policy unless explicitly overridden
+  eval_policy_mode: policy           # eval_rl100.py default checkpoint policy mode
+  eval_use_ema: false                # eval_rl100.py defaults to policy weights unless explicitly overridden
 
 # ============================================
 # Checkpoint Configuration

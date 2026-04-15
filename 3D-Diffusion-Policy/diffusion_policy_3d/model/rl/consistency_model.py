@@ -57,6 +57,7 @@ class ConsistencyModel(nn.Module):
         use_down_condition: bool = True,
         use_mid_condition: bool = True,
         use_up_condition: bool = True,
+        max_timestep: int = 99,
     ):
         super().__init__()
 
@@ -77,6 +78,7 @@ class ConsistencyModel(nn.Module):
 
         self.input_dim = input_dim
         self.global_cond_dim = global_cond_dim
+        self.max_timestep = int(max_timestep)
 
     def forward(
         self,
@@ -98,8 +100,13 @@ class ConsistencyModel(nn.Module):
         # Use a dummy timestep for consistency model (always predicts from noise)
         if timestep is None:
             batch_size = noisy_action.shape[0]
-            # Use maximum timestep to indicate "fully noisy"
-            timestep = torch.ones(batch_size, device=noisy_action.device, dtype=torch.long) * 999
+            # Match the teacher scheduler's maximum training timestep for x_T.
+            timestep = torch.full(
+                (batch_size,),
+                fill_value=self.max_timestep,
+                device=noisy_action.device,
+                dtype=torch.long,
+            )
 
         # Predict clean action directly
         clean_action_pred = self.model(
@@ -208,10 +215,6 @@ class ConsistencyDistillation:
                     else:
                         # Normalize observations (using teacher's normalizer)
                         nobs = self.teacher_policy.normalizer.normalize(obs_dict)
-
-                        # Remove color if needed
-                        if not self.teacher_policy.use_pc_color:
-                            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
 
                         this_nobs = {}
                         for key, value in nobs.items():

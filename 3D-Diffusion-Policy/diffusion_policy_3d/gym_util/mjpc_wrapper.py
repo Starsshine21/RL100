@@ -52,7 +52,7 @@ ENV_POINT_CLOUD_CONFIG = {
     
 }
 
-def point_cloud_sampling(point_cloud:np.ndarray, num_points:int, method:str='fps'):
+def point_cloud_sampling(point_cloud:np.ndarray, num_points:int, method:str='fps', rng=None):
     """
     support different point cloud sampling methods
     point_cloud: (N, 6), xyz+rgb or (N, 3), xyz
@@ -69,7 +69,10 @@ def point_cloud_sampling(point_cloud:np.ndarray, num_points:int, method:str='fps
 
     if method == 'uniform':
         # uniform sampling
-        sampled_indices = np.random.choice(point_cloud.shape[0], num_points, replace=False)
+        if rng is None:
+            sampled_indices = np.random.choice(point_cloud.shape[0], num_points, replace=False)
+        else:
+            sampled_indices = rng.choice(point_cloud.shape[0], num_points, replace=False)
         point_cloud = point_cloud[sampled_indices]
     elif method == 'fps':
         # fast point cloud sampling using torch3d
@@ -224,6 +227,5 @@ class MujocoPointcloudWrapperAdroit(gym.Wrapper):
 
 
     
-
 
 

@@ -11,5 +11,9 @@ except Exception:
 
 from .metaworld import MetaWorldEnv
 
+try:
+    from .real_robot import UR5eInspireDualCamEnv
+except Exception:
+    UR5eInspireDualCamEnv = None
 
 

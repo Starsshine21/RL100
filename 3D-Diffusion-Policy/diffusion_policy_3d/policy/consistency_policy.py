@@ -30,8 +30,6 @@ class ConsistencyPolicyWrapper(BasePolicy):
             batch_size = global_cond.shape[0]
         else:
             nobs = teacher.normalizer.normalize(obs_dict)
-            if not teacher.use_pc_color:
-                nobs['point_cloud'] = nobs['point_cloud'][..., :3]
 
             this_nobs = dict_apply(
                 nobs,

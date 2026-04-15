@@ -1,0 +1,26 @@
+defaults:
+  - rl100
+  - override task: realrobot_dualcam13dof
+  - _self_
+
+name: train_rl100_qam_rgb
+exp_name: qam_rgb_realrobot
+
+policy:
+  generative_mode: flow_matching
+  flow_sampling_steps: 8
+  rgb_encoder_type: dp_resnet
+  rgb_encoder_cfg:
+    crop_shape: [76, 76]
+    stage_channels: [32, 64, 128, 256]
+    blocks_per_stage: 2
+    use_group_norm: true
+
+training:
+  offline_policy_backend: qam
+  run_online_rl: false
+  resume: false
+
+runtime:
+  collection_policy: flow
+  collection_use_ema: false

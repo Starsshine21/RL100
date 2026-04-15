@@ -1,0 +1,30 @@
+defaults:
+  - rl100
+  - override task: realrobot_pick_place
+  - _self_
+
+name: train_rl100_qam_pick_place
+exp_name: qam_pick_place_realrobot
+
+policy:
+  generative_mode: flow_matching
+  flow_sampling_steps: 8
+  rgb_encoder_type: dp_resnet
+  rgb_encoder_cfg:
+    crop_shape: [224, 224]
+    stage_channels: [32, 64, 128, 256]
+    blocks_per_stage: 2
+    use_group_norm: true
+
+training:
+  offline_policy_backend: qam
+  run_online_rl: false
+  resume: false
+
+dataloader:
+  batch_size: 8
+  num_workers: 4
+
+runtime:
+  collection_policy: flow
+  collection_use_ema: false

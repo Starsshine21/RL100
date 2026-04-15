@@ -20,7 +20,7 @@ from typing import Dict, Tuple
 
 
 class MLP(nn.Module):
-    """Multi-layer perceptron with LayerNorm and Mish activation."""
+    """Configurable MLP used by the IQL Q/V critics."""
 
     def __init__(
         self,
@@ -28,9 +28,17 @@ class MLP(nn.Module):
         hidden_dims: tuple = (256, 256, 256),
         output_dim: int = 1,
         use_layernorm: bool = True,
-        dropout: float = 0.0
+        dropout: float = 0.0,
+        activation: str = 'mish',
     ):
         super().__init__()
+
+        if activation == 'relu':
+            activation_layer = nn.ReLU
+        elif activation == 'mish':
+            activation_layer = nn.Mish
+        else:
+            raise ValueError(f"Unsupported activation: {activation}")
 
         layers = []
         prev_dim = input_dim
@@ -39,7 +47,7 @@ class MLP(nn.Module):
             layers.append(nn.Linear(prev_dim, hidden_dim))
             if use_layernorm:
                 layers.append(nn.LayerNorm(hidden_dim))
-            layers.append(nn.Mish())
+            layers.append(activation_layer())
             if dropout > 0:
                 layers.append(nn.Dropout(dropout))
             prev_dim = hidden_dim
@@ -65,7 +73,8 @@ class VNetwork(nn.Module):
         obs_dim: int,
         hidden_dims: tuple = (256, 256, 256),
         use_layernorm: bool = True,
-        dropout: float = 0.0
+        dropout: float = 0.0,
+        activation: str = 'mish',
     ):
         super().__init__()
 
@@ -74,7 +83,8 @@ class VNetwork(nn.Module):
             hidden_dims=hidden_dims,
             output_dim=1,
             use_layernorm=use_layernorm,
-            dropout=dropout
+            dropout=dropout,
+            activation=activation,
         )
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
@@ -101,7 +111,8 @@ class QNetwork(nn.Module):
         action_dim: int,
         hidden_dims: tuple = (256, 256, 256),
         use_layernorm: bool = True,
-        dropout: float = 0.0
+        dropout: float = 0.0,
+        activation: str = 'mish',
     ):
         super().__init__()
 
@@ -113,7 +124,8 @@ class QNetwork(nn.Module):
             hidden_dims=hidden_dims,
             output_dim=1,
             use_layernorm=use_layernorm,
-            dropout=dropout
+            dropout=dropout,
+            activation=activation,
         )
 
         self.q2 = MLP(
@@ -121,7 +133,8 @@ class QNetwork(nn.Module):
             hidden_dims=hidden_dims,
             output_dim=1,
             use_layernorm=use_layernorm,
-            dropout=dropout
+            dropout=dropout,
+            activation=activation,
         )
 
     def forward(
@@ -163,7 +176,8 @@ class IQLCritics(nn.Module):
     Args:
         obs_dim: Observation feature dimension (e.g., 64 from PointNet encoder)
         action_dim: Action dimension (e.g., 4 for Metaworld push)
-        hidden_dims: Hidden layer dimensions for MLP
+        q_hidden_dims: Hidden layer dimensions for Q MLP
+        v_hidden_dims: Hidden layer dimensions for V MLP
         gamma: Discount factor (default: 0.99)
         tau: Expectile parameter for V update (default: 0.7)
     """
@@ -172,11 +186,13 @@ class IQLCritics(nn.Module):
         self,
         obs_dim: int,
         action_dim: int,
-        hidden_dims: tuple = (256, 256, 256),
+        q_hidden_dims: tuple = (256, 256, 256),
+        v_hidden_dims: tuple = (256, 256, 256),
         gamma: float = 0.99,
         tau: float = 0.7,
         use_layernorm: bool = True,
-        dropout: float = 0.0
+        dropout: float = 0.0,
+        activation: str = 'mish',
     ):
         super().__init__()
 
@@ -188,26 +204,29 @@ class IQLCritics(nn.Module):
         # V network
         self.v_network = VNetwork(
             obs_dim=obs_dim,
-            hidden_dims=hidden_dims,
+            hidden_dims=v_hidden_dims,
             use_layernorm=use_layernorm,
-            dropout=dropout
+            dropout=dropout,
+            activation=activation,
         )
 
         # Twin Q networks
         self.q_network = QNetwork(
             obs_dim=obs_dim,
             action_dim=action_dim,
-            hidden_dims=hidden_dims,
+            hidden_dims=q_hidden_dims,
             use_layernorm=use_layernorm,
-            dropout=dropout
+            dropout=dropout,
+            activation=activation,
         )
 
         # Target V network for stable Q learning
         self.v_network_target = VNetwork(
             obs_dim=obs_dim,
-            hidden_dims=hidden_dims,
+            hidden_dims=v_hidden_dims,
             use_layernorm=use_layernorm,
-            dropout=dropout
+            dropout=dropout,
+            activation=activation,
         )
         self.v_network_target.load_state_dict(self.v_network.state_dict())
 

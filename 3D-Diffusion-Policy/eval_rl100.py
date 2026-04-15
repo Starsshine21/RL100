@@ -20,14 +20,29 @@ sys.path.append(ROOT_DIR)
 
 import hydra
 import torch
+import numpy as np
+import random
 from omegaconf import OmegaConf, DictConfig
 from termcolor import cprint
 
 from diffusion_policy_3d.env_runner.base_runner import BaseRunner
+from diffusion_policy_3d.common.config_util import (
+    get_task_execution_mode,
+    is_cm_policy_enabled,
+    is_eval_enabled,
+)
 from diffusion_policy_3d.model.rl.consistency_model import ConsistencyModel
 from diffusion_policy_3d.policy.consistency_policy import ConsistencyPolicyWrapper
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
+
+
+def set_seed(seed: int):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 @hydra.main(
@@ -42,8 +57,17 @@ def main(cfg: DictConfig):
         raise ValueError("Must specify checkpoint_path=... on the command line.")
     policy_mode = str(getattr(cfg.runtime, 'eval_policy_mode', 'ddim')).lower()
     eval_use_ema = bool(getattr(cfg.runtime, 'eval_use_ema', False))
+    execution_mode = get_task_execution_mode(cfg)
+
+    if not is_eval_enabled(cfg):
+        raise ValueError(
+            f"Evaluation is disabled for task.execution.mode={execution_mode}. "
+            "Override task.execution.enable_eval=true if you want to run eval_rl100.py explicitly."
+        )
 
     device = torch.device(cfg.training.device)
+    eval_seed = int(getattr(cfg.training, 'seed', 0))
+    set_seed(eval_seed)
     cprint(f"[Eval] Loading checkpoint: {checkpoint_path}", "cyan")
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
@@ -64,6 +88,11 @@ def main(cfg: DictConfig):
 
     runtime_policy = policy
     if policy_mode == 'cm':
+        if not is_cm_policy_enabled(cfg):
+            raise ValueError(
+                f"CM policy is disabled for task.execution.mode={execution_mode}. "
+                "Override task.execution.enable_cm_policy=true to evaluate the consistency policy."
+            )
         cprint("[Eval] Building 1-step consistency policy wrapper.", "cyan")
         consistency_model = ConsistencyModel(
             input_dim=policy.action_dim,
@@ -76,7 +105,8 @@ def main(cfg: DictConfig):
             down_dims=cfg.policy.down_dims,
             kernel_size=cfg.policy.kernel_size,
             n_groups=cfg.policy.n_groups,
-            condition_type=cfg.policy.condition_type
+            condition_type=cfg.policy.condition_type,
+            max_timestep=int(cfg.policy.noise_scheduler.num_train_timesteps) - 1,
         )
         consistency_model.to(device)
         consistency_model.load_state_dict(checkpoint['consistency_model'])
@@ -90,10 +120,17 @@ def main(cfg: DictConfig):
     # Instantiate env runner
     output_dir = os.getcwd()
     cprint("[Eval] Instantiating env runner...", "cyan")
+    if cfg.task.get('env_runner', None) is None:
+        raise ValueError("task.env_runner is null. Evaluation requires a configured environment runner.")
     env_runner: BaseRunner = hydra.utils.instantiate(
         cfg.task.env_runner,
-        output_dir=output_dir
+        output_dir=output_dir,
+        seed=eval_seed,
     )
+    if getattr(env_runner, 'env', object()) is None:
+        raise ValueError(
+            "task.env_runner.env is null. Provide a real/sim env implementation before evaluation."
+        )
 
     cprint(f"[Eval] Running evaluation with {policy_mode} policy ({cfg.task.env_runner.eval_episodes} episodes)...", "cyan")
     with torch.no_grad():

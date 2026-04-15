@@ -3,6 +3,7 @@ import argparse
 import os
 import zarr
 import numpy as np
+import random
 from diffusion_policy_3d.env import MetaWorldEnv
 from termcolor import cprint
 import copy
@@ -10,8 +11,6 @@ import imageio
 from metaworld.policies import *
 # import faulthandler
 # faulthandler.enable()
-
-seed = np.random.randint(0, 100)
 
 def load_mw_policy(task_name):
 	if task_name == 'peg-insert-side':
@@ -23,8 +22,60 @@ def load_mw_policy(task_name):
 		agent = eval(task_name)()
 	return agent
 
+
+def load_task_config(task_config_path):
+	if task_config_path is None:
+		return None
+	point_cloud_cfg = {}
+	demonstration_cfg = {}
+	current_section = None
+	with open(task_config_path, 'r') as f:
+		for raw_line in f:
+			line = raw_line.rstrip('\n')
+			stripped = line.strip()
+			if not stripped or stripped.startswith('#'):
+				continue
+			indent = len(line) - len(line.lstrip(' '))
+			if indent == 0 and ':' in stripped:
+				section_name = stripped.split(':', 1)[0].strip()
+				if section_name in ('point_cloud', 'demonstration'):
+					current_section = section_name
+				else:
+					current_section = None
+				continue
+			if current_section is None or indent != 2 or ':' not in stripped:
+				continue
+			key, value = stripped.split(':', 1)
+			key = key.strip()
+			value = value.strip()
+			if not value or value.startswith('${'):
+				continue
+			if value.lower() in ('true', 'false'):
+				parsed_value = (value.lower() == 'true')
+			else:
+				try:
+					parsed_value = int(value)
+				except ValueError:
+					parsed_value = value
+			if current_section == 'point_cloud':
+				point_cloud_cfg[key] = parsed_value
+			else:
+				demonstration_cfg[key] = parsed_value
+	return {
+		'num_points': int(point_cloud_cfg.get('num_points', 0)),
+		'use_pc_color': bool(point_cloud_cfg.get('use_pc_color', False)),
+		'use_point_crop': bool(point_cloud_cfg.get('use_point_crop', True)),
+		'point_sampling_method': str(point_cloud_cfg.get('sampling_method', 'fps')),
+		'num_episodes': int(demonstration_cfg.get('num_episodes', 100)),
+	}
+
 def main(args):
 	env_name = args.env_name
+	task_cfg = load_task_config(args.task_config) or {}
+	seed = int(args.seed)
+
+	np.random.seed(seed)
+	random.seed(seed)
 
 	
 	save_dir = os.path.join(args.root_dir, 'metaworld_'+args.env_name+'_expert.zarr')
@@ -41,10 +92,42 @@ def main(args):
 			return
 	os.makedirs(save_dir, exist_ok=True)
 
-	e = MetaWorldEnv(env_name, device="cuda:0", use_point_crop=True)
+	num_points = args.num_points if args.num_points is not None else task_cfg.get('num_points', None)
+	if num_points is None:
+		raise ValueError("num_points must be provided either by --task_config or --num_points.")
+	num_points = int(num_points)
+	use_pc_color = bool(
+		args.use_pc_color
+		if args.use_pc_color is not None else task_cfg.get('use_pc_color', False)
+	)
+	use_point_crop = bool(
+		args.use_point_crop
+		if args.use_point_crop is not None else task_cfg.get('use_point_crop', True)
+	)
+	point_sampling_method = str(
+		args.point_sampling_method
+		if args.point_sampling_method is not None else task_cfg.get('point_sampling_method', 'fps')
+	)
+
+	e = MetaWorldEnv(
+		env_name,
+		device="cuda:0",
+		use_point_crop=use_point_crop,
+		use_pc_color=use_pc_color,
+		point_sampling_method=point_sampling_method,
+		num_points=num_points,
+		seed=seed,
+	)
 	
-	num_episodes = args.num_episodes
+	num_episodes = int(args.num_episodes if args.num_episodes is not None else task_cfg.get('num_episodes', 100))
 	cprint(f"Number of episodes : {num_episodes}", "yellow")
+	cprint(f"Collection seed: {seed}", "yellow")
+	cprint(
+		f"Point cloud config: num_points={num_points}, "
+		f"use_pc_color={use_pc_color}, sampling={point_sampling_method}, "
+		f"use_point_crop={use_point_crop}",
+		"yellow",
+	)
 	
 
 	total_count = 0
@@ -206,10 +289,16 @@ if __name__ == "__main__":
     
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--env_name', type=str, default='basketball')
-	parser.add_argument('--num_episodes', type=int, default=10)
+	parser.add_argument('--task_config', type=str, default=None)
+	parser.add_argument('--num_episodes', type=int, default=None)
 	parser.add_argument('--root_dir', type=str, default="../../3D-Diffusion-Policy/data/" )
+	parser.add_argument('--num_points', type=int, default=None)
+	parser.add_argument('--use_pc_color', type=lambda x: x.lower() == 'true', default=None)
+	parser.add_argument('--use_point_crop', type=lambda x: x.lower() == 'true', default=None)
+	parser.add_argument('--point_sampling_method', type=str, default=None)
 	parser.add_argument('--reward_type', type=str, default='sparse', choices=['sparse', 'dense'],
 	                    help='sparse: reward=1 at last step only; dense: use env shaped reward')
+	parser.add_argument('--seed', type=int, default=42)
 
 	args = parser.parse_args()
 	main(args)

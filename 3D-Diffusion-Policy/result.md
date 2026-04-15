@@ -1,21 +1,23 @@
-Job start at 2026-03-25 17:23:40
+Job start at 2026-04-02 11:01:03
 Job run at:
    Static hostname: localhost.localdomain
-Transient hostname: r8a30-a06
+Transient hostname: r8l40s-a05
          Icon name: computer-server
            Chassis: server
-        Machine ID: df5d662d31bf4cc3ab86556a4c775478
-           Boot ID: 873af846a6f24b3da0e9ef5d75044627
+        Machine ID: 3ca2905c1b7740bb8ba855b252a5c4a9
+           Boot ID: 11804f13fb1a497c9344d1b66b9abab7
   Operating System: Rocky Linux 8.7 (Green Obsidian)
        CPE OS Name: cpe:/o:rocky:rocky:8:GA
             Kernel: Linux 4.18.0-425.10.1.el8_7.x86_64
       Architecture: x86-64
 Filesystem                                        Size  Used Avail Use% Mounted on
-/dev/mapper/rl-root                               120G   29G   92G  24% /
-/dev/sda2                                         2.0G  305M  1.7G  15% /boot
-/dev/mapper/rl-local                              512G  172G  341G  34% /local
-/dev/mapper/rl-var                                256G   23G  234G   9% /var
-/dev/sda1                                         599M  5.8M  594M   1% /boot/efi
+/dev/mapper/rl-root                               376G   30G  347G   8% /
+/dev/nvme1n1p1                                    1.8T   13G  1.8T   1% /tmp
+/dev/nvme2n1p1                                    3.5T   25G  3.5T   1% /local
+/dev/mapper/rl-var                                512G   20G  493G   4% /var
+/dev/nvme0n1p2                                    2.0G  367M  1.7G  18% /boot
+/dev/nvme1n1p2                                    1.8T   14G  1.8T   1% /local/nfscache
+/dev/nvme0n1p1                                    599M  5.8M  594M   1% /boot/efi
 ssd.nas00.future.cn:/rocky8_home                   16G   15G  2.0G  88% /home
 ssd.nas00.future.cn:/rocky8_workspace             400G     0  400G   0% /workspace
 ssd.nas00.future.cn:/rocky8_tools                 5.0T   99G  5.0T   2% /tools
@@ -24,8 +26,8 @@ ssd.nas00.future.cn:/centos7_workspace            400G     0  400G   0% /centos7
 ssd.nas00.future.cn:/centos7_tools                5.0T  235G  4.8T   5% /centos7/tools
 ssd.nas00.future.cn:/eda-tools                    8.0T  6.4T  1.7T  79% /centos7/eda-tools
 hdd.nas00.future.cn:/share_personal               500G     0  500G   0% /share/personal
-zone05.nas01.future.cn:/NAS_HPC_collab_codemodel   40T   37T  3.4T  92% /share/collab/codemodel
-ext-zone00.nas02.future.cn:/nfs_global            408T  393T   16T  97% /nfs_global
+zone05.nas01.future.cn:/NAS_HPC_collab_codemodel   40T   37T  3.3T  92% /share/collab/codemodel
+ext-zone00.nas02.future.cn:/nfs_global            425T  400T   26T  95% /nfs_global
 ssd.nas00.future.cn:/common_datasets               75T   64T   12T  85% /datasets
 192.168.12.10@o2ib:192.168.12.11@o2ib:/lustre     1.9P   12T  1.7P   1% /lustre
 beegfs_nodev                                       70T   15T   56T  21% /fast
@@ -36,7 +38,7 @@ Currently Loaded Modulefiles: 1) cluster-tools/v1.0 3) cuda-cudnn/12.1-8.9.3 5) 
 ############### /home : /home/S/yangrongzheng
 Disk quotas for user yangrongzheng (uid 6215): 
      Filesystem   space   quota   limit   grace   files   quota   limit   grace
-          /home  14339M  16384M  20480M            160k       0       0        
+          /home  14340M  16384M  20480M            160k       0       0        
 
 ############### /workspace
 Disk quotas for user yangrongzheng (uid 6215): 
@@ -46,7 +48,7 @@ Disk quotas for user yangrongzheng (uid 6215):
 ############### /nfs_global
 Disk quotas for user yangrongzheng (uid 6215): 
      Filesystem   space   quota   limit   grace   files   quota   limit   grace
-    /nfs_global    492G   5120G   7168G            354k   5000k  10000k        
+    /nfs_global    479G   5120G   7168G            352k   5000k  10000k        
 
 ############### /lustre
 Disk quotas for usr yangrongzheng (uid 6215):
@@ -55,17 +57,17 @@ Disk quotas for usr yangrongzheng (uid 6215):
 uid 6215 is using default block quota setting
 uid 6215 is using default file quota setting
 name, driver_version, power.limit [W]
-NVIDIA A30, 570.124.06, 165.00 W
-NVIDIA A30, 570.124.06, 165.00 W
-NVIDIA A30, 570.124.06, 165.00 W
-NVIDIA A30, 570.124.06, 165.00 W
-NVIDIA A30, 570.124.06, 165.00 W
-NVIDIA A30, 570.124.06, 165.00 W
-NVIDIA A30, 570.124.06, 165.00 W
-NVIDIA A30, 570.124.06, 165.00 W
+NVIDIA L40S, 570.124.06, 325.00 W
+NVIDIA L40S, 570.124.06, 325.00 W
+NVIDIA L40S, 570.124.06, 325.00 W
+NVIDIA L40S, 570.124.06, 325.00 W
+NVIDIA L40S, 570.124.06, 325.00 W
+NVIDIA L40S, 570.124.06, 325.00 W
+NVIDIA L40S, 570.124.06, 325.00 W
+NVIDIA L40S, 570.124.06, 325.00 W
 Using GPU(s) 0,1,2,3,4,5,6,7
 This job is assigned the following resources by SLURM:
-CPU_IDs=0-63 GRES=gpu:8(IDX:0-7)
+CPU_IDs=0-111 GRES=gpu:8(IDX:0-7)
 Main program continues to run. Monitoring information will be exported after three hours.
 Have already added /tools/cluster-modulefiles into $MODULEPATH
 no change     /home/S/yangrongzheng/miniconda3/condabin/conda
@@ -88,14 +90,22 @@ No action taken.
 
 Configuration:
 task:
-  name: dial-turn
+  name: peg-insert-side
   task_name: ${.name}
+  point_cloud:
+    num_points: 512
+    channels: 3
+    use_pc_color: false
+    use_point_crop: true
+    sampling_method: fps
+  demonstration:
+    num_episodes: 10
   shape_meta:
     obs:
       point_cloud:
         shape:
-        - 512
-        - 3
+        - ${task.point_cloud.num_points}
+        - ${task.point_cloud.channels}
         type: point_cloud
       agent_pos:
         shape:
@@ -115,11 +125,13 @@ task:
     n_test: null
     task_name: ${task_name}
     device: ${training.device}
-    use_point_crop: ${policy.use_point_crop}
-    num_points: 512
+    use_point_crop: ${task.point_cloud.use_point_crop}
+    use_pc_color: ${task.point_cloud.use_pc_color}
+    point_sampling_method: ${task.point_cloud.sampling_method}
+    num_points: ${task.point_cloud.num_points}
   dataset:
     _target_: diffusion_policy_3d.dataset.metaworld_dataset.MetaworldDataset
-    zarr_path: data/metaworld_dial-turn_expert.zarr
+    zarr_path: data/metaworld_peg-insert-side_expert.zarr
     horizon: ${horizon}
     pad_before: ${eval:'${n_obs_steps}-1'}
     pad_after: ${eval:'${n_action_steps}-1'}
@@ -225,16 +237,26 @@ training:
   il_retrain_epochs: 100
   retrain_il_after_collection: true
   num_offline_iterations: 10
+  transition_max_epochs: 50
+  transition_patience: 5
   critic_epochs: 20
+  offline_critic_steps: 1000
   ppo_epochs: 3
+  offline_ppo_steps: 1000
+  offline_ppo_max_passes: 8
   ppo_inner_steps: 1
-  collection_episodes: 20
+  collection_episodes: 50
   cd_every: 5
   lambda_cd: 0
-  rl_policy_lr: 1.0e-05
+  rl_policy_lr: 4.0e-06
+  ppo_target_kl: 0.5
+  ppo_target_clip_frac: 0.6
+  ppo_early_stop_min_steps: 10
   run_online_rl: true
   online_rl_iterations: 10
-  online_collection_episodes: 20
+  online_collection_episodes: 50
+  online_value_steps: 200
+  online_ppo_steps: 100
   lambda_v: 0.5
   gae_lambda: 0.95
   gradient_accumulate_every: 1
@@ -243,23 +265,24 @@ training:
   eval_every: 100
   checkpoint_every: 200
   resume: true
+  resume_load_rl_state: false
   resume_path: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/after_il.ckpt
 ope:
   num_batches: 100
-  rollout_horizon: 3
-  delta_coef: 0.01
+  rollout_horizon: 5
+  delta_coef: 0.0
   delta_abs_min: 0.0
 runtime:
   collection_policy: ddim
   collection_use_ema: false
   il_retrain_success_only: true
-  merge_success_only: true
+  restore_best_ddim_before_final_eval: true
   final_eval_policies:
   - ddim
   - cm
-  final_eval_use_ema: true
+  final_eval_use_ema: false
   eval_policy_mode: ddim
-  eval_use_ema: true
+  eval_use_ema: false
 checkpoint:
   save_ckpt: true
   save_last_ckpt: true
@@ -280,18 +303,22 @@ logging:
 [Setup] Output directory: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy
 
 [Setup] Loading dataset...
-Replay Buffer: state, shape (20000, 9), dtype float32, range -0.16~0.88
-Replay Buffer: action, shape (20000, 4), dtype float32, range -1.51~1.69
-Replay Buffer: point_cloud, shape (20000, 1024, 6), dtype float32, range -0.95~255.00
-Replay Buffer: reward, shape (20000,), dtype float32, range 0.00~1.00
-Replay Buffer: done, shape (20000,), dtype float32, range 0.00~1.00
+Replay Buffer: state, shape (2000, 9), dtype float32, range -0.23~0.76
+Replay Buffer: action, shape (2000, 4), dtype float32, range -11.52~6.85
+Replay Buffer: point_cloud, shape (2000, 512, 3), dtype float32, range -1.10~0.63
+Replay Buffer: reward, shape (2000,), dtype float32, range 0.00~1.00
+Replay Buffer: done, shape (2000,), dtype float32, range 0.00~1.00
 --------------------------
-[Setup] Dataset loaded: 17370 samples across 100 episodes
+[Setup] Dataset loaded: 1737 samples across 10 episodes
 [Setup] Dataset has reward/done labels: True
-[Setup] Dataset point_cloud points: 1024
+[Setup] Dataset point_cloud shape: (512, 3)
 [Setup] Initializing environment runner...
-[Setup] env_runner.num_points=512 differs from dataset=1024. Override to dataset value to avoid merge shape mismatch.
+obj_low: (0.0, 0.5, 0.02), obj_high: (0.2, 0.7, 0.02)
+goal_low: (-0.35, 0.4, -0.001), goal_high: (-0.25, 0.7, 0.001)
 [MetaWorldEnv] use_point_crop: True
+[MetaWorldEnv] use_pc_color: False
+[MetaWorldEnv] point_sampling_method: fps
+[MetaWorldEnv] num_points: 512
 [Setup] Environment runner initialized
 
 [Setup] Initializing RL100Trainer...
@@ -307,7 +334,7 @@ Replay Buffer: done, shape (20000,), dtype float32, range 0.00~1.00
 [DP3Encoder] output dim: 128
 [DiffusionUnetHybridPointcloudPolicy] use_pc_color: False
 [DiffusionUnetHybridPointcloudPolicy] pointnet_type: pointnet
-[2026-03-25 17:23:58,015][diffusion_policy_3d.model.diffusion.conditional_unet1d][INFO] - number of parameters: 2.550744e+08
+[2026-04-02 11:01:31,037][diffusion_policy_3d.model.diffusion.conditional_unet1d][INFO] - number of parameters: 2.550744e+08
 ----------------------------------
 Class name: RL100Policy
   Number of parameters: 255.1383M
@@ -318,15 +345,13 @@ Class name: RL100Policy
 ----------------------------------
 [RL100Trainer] Initializing IQL Critics...
 [RL100Trainer] Initializing Consistency Model...
-[2026-03-25 17:23:59,794][diffusion_policy_3d.model.diffusion.conditional_unet1d][INFO] - number of parameters: 2.550744e+08
+[2026-04-02 11:01:32,920][diffusion_policy_3d.model.diffusion.conditional_unet1d][INFO] - number of parameters: 2.550744e+08
 [RL100Trainer] Initializing Transition Model T_θ(s'|s,a)...
 [Setup] RL100Trainer initialized
 
 [Setup] Resuming from checkpoint: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/after_il.ckpt
-[TransitionModel] Checkpoint loaded.
-[Checkpoint] policy_optimizer not restored (ValueError: loaded state dict contains a parameter group that doesn't match the size of optimizer's group)
-[Checkpoint] Loaded from /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/after_il.ckpt
-[Setup] IL phase will be skipped — starting directly from offline RL.
+[Checkpoint] Loaded policy/EMA only; RL heads and optimizers keep fresh initialization.
+[Setup] IL phase will be skipped — starting offline RL from restored IL policy with fresh RL heads.
 
 [Training] Starting RL-100 pipeline...
 
@@ -337,6 +362,10 @@ Class name: RL100Policy
 
 [RL100Trainer] Skipping IL phase — loaded from checkpoint.
 [RL100Trainer] Normalizer synced from dataset. Resuming offline RL from iteration 0.
+[RL100Trainer] Evaluating resumed DDIM policy to establish best-checkpoint baseline.
+test_mean_score: 0.6
+[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/best_ddim.ckpt
+[BestDDIM] Recorded initial best DDIM checkpoint: 0.6000 at resume_loaded_policy.
 [RL100Trainer] Dataset already contains reward/done labels; keep existing rewards.
 
 ================================================================================
@@ -347,62 +376,184 @@ Class name: RL100Policy
 [RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 0)
 
 [TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 17370 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=5.39324 | val=0.00488 | no-improve=0/5
-[TransitionModel] Epoch   20 | train=-31.21736 | val=0.00051 | no-improve=0/5
-[TransitionModel] Epoch   40 | train=-37.27446 | val=0.00039 | no-improve=0/5
-[TransitionModel] Epoch   60 | train=-41.41919 | val=0.00033 | no-improve=0/5
-[TransitionModel] Epoch   80 | train=-45.35632 | val=0.00029 | no-improve=0/5
-[TransitionModel] Epoch  100 | train=-49.11932 | val=0.00021 | no-improve=0/5
-[TransitionModel] Epoch  120 | train=-52.74034 | val=0.00017 | no-improve=0/5
-[TransitionModel] Epoch  140 | train=-56.12397 | val=0.00015 | no-improve=0/5
-[TransitionModel] Epoch  160 | train=-59.82198 | val=0.00013 | no-improve=0/5
-[TransitionModel] Epoch  180 | train=-63.17687 | val=0.00013 | no-improve=0/5
-[TransitionModel] Training complete. Elites=[2, 0, 6, 3, 4], val_loss=0.00012
+[TransitionModel] Dataset: 1737 samples, input_dim=288, target_dim=257
+[TransitionModel] Epoch    0 | train=23.73646 | val=0.00666 | no-improve=0/5
+[TransitionModel] Epoch    5 | train=-0.08544 | val=0.00825 | no-improve=5/5
+[TransitionModel] Training complete. Elites=[4, 0, 6, 5, 2], val_loss=0.00666
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_00.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_00.png
 
 [RL100Trainer] Phase 2a: Training IQL Critics (Iteration 0)
-[IQL] Epoch 0/20, V Loss: 0.0314, Q Loss: 0.0613
-[IQL] Epoch 1/20, V Loss: 0.0001, Q Loss: 0.0084
-[IQL] Epoch 2/20, V Loss: 0.0001, Q Loss: 0.0081
-[IQL] Epoch 3/20, V Loss: 0.0001, Q Loss: 0.0079
-[IQL] Epoch 4/20, V Loss: 0.0001, Q Loss: 0.0078
-[IQL] Epoch 5/20, V Loss: 0.0001, Q Loss: 0.0077
-[IQL] Epoch 6/20, V Loss: 0.0001, Q Loss: 0.0078
-[IQL] Epoch 7/20, V Loss: 0.0002, Q Loss: 0.0077
-[IQL] Epoch 8/20, V Loss: 0.0001, Q Loss: 0.0075
-[IQL] Epoch 9/20, V Loss: 0.0001, Q Loss: 0.0075
-[IQL] Epoch 10/20, V Loss: 0.0002, Q Loss: 0.0075
-[IQL] Epoch 11/20, V Loss: 0.0001, Q Loss: 0.0073
-[IQL] Epoch 12/20, V Loss: 0.0002, Q Loss: 0.0074
-[IQL] Epoch 13/20, V Loss: 0.0003, Q Loss: 0.0075
-[IQL] Epoch 14/20, V Loss: 0.0002, Q Loss: 0.0072
-[IQL] Epoch 15/20, V Loss: 0.0002, Q Loss: 0.0071
-[IQL] Epoch 16/20, V Loss: 0.0002, Q Loss: 0.0072
-[IQL] Epoch 17/20, V Loss: 0.0002, Q Loss: 0.0073
-[IQL] Epoch 18/20, V Loss: 0.0002, Q Loss: 0.0070
-[IQL] Epoch 19/20, V Loss: 0.0004, Q Loss: 0.0071
+[IQL] Step 7/1000, V Loss: 0.5649, Q Loss: 0.3743
+[IQL] Step 14/1000, V Loss: 0.0174, Q Loss: 0.0530
+[IQL] Step 21/1000, V Loss: 0.0019, Q Loss: 0.0287
+[IQL] Step 28/1000, V Loss: 0.0025, Q Loss: 0.0151
+[IQL] Step 35/1000, V Loss: 0.0043, Q Loss: 0.0088
+[IQL] Step 42/1000, V Loss: 0.0030, Q Loss: 0.0062
+[IQL] Step 49/1000, V Loss: 0.0019, Q Loss: 0.0047
+[IQL] Step 56/1000, V Loss: 0.0016, Q Loss: 0.0039
+[IQL] Step 63/1000, V Loss: 0.0008, Q Loss: 0.0034
+[IQL] Step 70/1000, V Loss: 0.0003, Q Loss: 0.0031
+[IQL] Step 77/1000, V Loss: 0.0003, Q Loss: 0.0029
+[IQL] Step 84/1000, V Loss: 0.0004, Q Loss: 0.0029
+[IQL] Step 91/1000, V Loss: 0.0002, Q Loss: 0.0026
+[IQL] Step 98/1000, V Loss: 0.0002, Q Loss: 0.0026
+[IQL] Step 105/1000, V Loss: 0.0003, Q Loss: 0.0025
+[IQL] Step 112/1000, V Loss: 0.0002, Q Loss: 0.0024
+[IQL] Step 119/1000, V Loss: 0.0002, Q Loss: 0.0024
+[IQL] Step 126/1000, V Loss: 0.0002, Q Loss: 0.0024
+[IQL] Step 133/1000, V Loss: 0.0002, Q Loss: 0.0025
+[IQL] Step 140/1000, V Loss: 0.0002, Q Loss: 0.0024
+[IQL] Step 147/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 154/1000, V Loss: 0.0002, Q Loss: 0.0024
+[IQL] Step 161/1000, V Loss: 0.0002, Q Loss: 0.0022
+[IQL] Step 168/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 175/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 182/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 189/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 196/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 203/1000, V Loss: 0.0002, Q Loss: 0.0022
+[IQL] Step 210/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 217/1000, V Loss: 0.0002, Q Loss: 0.0022
+[IQL] Step 224/1000, V Loss: 0.0001, Q Loss: 0.0021
+[IQL] Step 231/1000, V Loss: 0.0002, Q Loss: 0.0022
+[IQL] Step 238/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 245/1000, V Loss: 0.0002, Q Loss: 0.0022
+[IQL] Step 252/1000, V Loss: 0.0002, Q Loss: 0.0022
+[IQL] Step 259/1000, V Loss: 0.0001, Q Loss: 0.0021
+[IQL] Step 266/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 273/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 280/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 287/1000, V Loss: 0.0001, Q Loss: 0.0021
+[IQL] Step 294/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 301/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 308/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 315/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 322/1000, V Loss: 0.0002, Q Loss: 0.0022
+[IQL] Step 329/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 336/1000, V Loss: 0.0001, Q Loss: 0.0021
+[IQL] Step 343/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 350/1000, V Loss: 0.0001, Q Loss: 0.0021
+[IQL] Step 357/1000, V Loss: 0.0002, Q Loss: 0.0022
+[IQL] Step 364/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 371/1000, V Loss: 0.0001, Q Loss: 0.0021
+[IQL] Step 378/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 385/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 392/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 399/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 406/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 413/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 420/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 427/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 434/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 441/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 448/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 455/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 462/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 469/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 476/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 483/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 490/1000, V Loss: 0.0002, Q Loss: 0.0024
+[IQL] Step 497/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 504/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 511/1000, V Loss: 0.0001, Q Loss: 0.0022
+[IQL] Step 518/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 525/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 532/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 539/1000, V Loss: 0.0002, Q Loss: 0.0024
+[IQL] Step 546/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 553/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 560/1000, V Loss: 0.0001, Q Loss: 0.0026
+[IQL] Step 567/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 574/1000, V Loss: 0.0002, Q Loss: 0.0023
+[IQL] Step 581/1000, V Loss: 0.0002, Q Loss: 0.0024
+[IQL] Step 588/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 595/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 602/1000, V Loss: 0.0001, Q Loss: 0.0023
+[IQL] Step 609/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 616/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 623/1000, V Loss: 0.0002, Q Loss: 0.0025
+[IQL] Step 630/1000, V Loss: 0.0002, Q Loss: 0.0025
+[IQL] Step 637/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 644/1000, V Loss: 0.0001, Q Loss: 0.0024
+[IQL] Step 651/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 658/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 665/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 672/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 679/1000, V Loss: 0.0001, Q Loss: 0.0027
+[IQL] Step 686/1000, V Loss: 0.0002, Q Loss: 0.0028
+[IQL] Step 693/1000, V Loss: 0.0001, Q Loss: 0.0027
+[IQL] Step 700/1000, V Loss: 0.0001, Q Loss: 0.0026
+[IQL] Step 707/1000, V Loss: 0.0001, Q Loss: 0.0025
+[IQL] Step 714/1000, V Loss: 0.0001, Q Loss: 0.0029
+[IQL] Step 721/1000, V Loss: 0.0001, Q Loss: 0.0026
+[IQL] Step 728/1000, V Loss: 0.0002, Q Loss: 0.0027
+[IQL] Step 735/1000, V Loss: 0.0003, Q Loss: 0.0027
+[IQL] Step 742/1000, V Loss: 0.0003, Q Loss: 0.0028
+[IQL] Step 749/1000, V Loss: 0.0002, Q Loss: 0.0029
+[IQL] Step 756/1000, V Loss: 0.0002, Q Loss: 0.0029
+[IQL] Step 763/1000, V Loss: 0.0001, Q Loss: 0.0026
+[IQL] Step 770/1000, V Loss: 0.0001, Q Loss: 0.0026
+[IQL] Step 777/1000, V Loss: 0.0001, Q Loss: 0.0026
+[IQL] Step 784/1000, V Loss: 0.0001, Q Loss: 0.0026
+[IQL] Step 791/1000, V Loss: 0.0001, Q Loss: 0.0027
+[IQL] Step 798/1000, V Loss: 0.0002, Q Loss: 0.0027
+[IQL] Step 805/1000, V Loss: 0.0002, Q Loss: 0.0027
+[IQL] Step 812/1000, V Loss: 0.0001, Q Loss: 0.0026
+[IQL] Step 819/1000, V Loss: 0.0001, Q Loss: 0.0028
+[IQL] Step 826/1000, V Loss: 0.0001, Q Loss: 0.0027
+[IQL] Step 833/1000, V Loss: 0.0001, Q Loss: 0.0028
+[IQL] Step 840/1000, V Loss: 0.0002, Q Loss: 0.0030
+[IQL] Step 847/1000, V Loss: 0.0001, Q Loss: 0.0030
+[IQL] Step 854/1000, V Loss: 0.0002, Q Loss: 0.0028
+[IQL] Step 861/1000, V Loss: 0.0002, Q Loss: 0.0033
+[IQL] Step 868/1000, V Loss: 0.0002, Q Loss: 0.0031
+[IQL] Step 875/1000, V Loss: 0.0003, Q Loss: 0.0032
+[IQL] Step 882/1000, V Loss: 0.0003, Q Loss: 0.0032
+[IQL] Step 889/1000, V Loss: 0.0002, Q Loss: 0.0030
+[IQL] Step 896/1000, V Loss: 0.0001, Q Loss: 0.0028
+[IQL] Step 903/1000, V Loss: 0.0002, Q Loss: 0.0028
+[IQL] Step 910/1000, V Loss: 0.0002, Q Loss: 0.0029
+[IQL] Step 917/1000, V Loss: 0.0001, Q Loss: 0.0030
+[IQL] Step 924/1000, V Loss: 0.0002, Q Loss: 0.0032
+[IQL] Step 931/1000, V Loss: 0.0004, Q Loss: 0.0030
+[IQL] Step 938/1000, V Loss: 0.0002, Q Loss: 0.0029
+[IQL] Step 945/1000, V Loss: 0.0001, Q Loss: 0.0028
+[IQL] Step 952/1000, V Loss: 0.0001, Q Loss: 0.0028
+[IQL] Step 959/1000, V Loss: 0.0001, Q Loss: 0.0029
+[IQL] Step 966/1000, V Loss: 0.0001, Q Loss: 0.0029
+[IQL] Step 973/1000, V Loss: 0.0001, Q Loss: 0.0029
+[IQL] Step 980/1000, V Loss: 0.0001, Q Loss: 0.0030
+[IQL] Step 987/1000, V Loss: 0.0001, Q Loss: 0.0029
+[IQL] Step 994/1000, V Loss: 0.0002, Q Loss: 0.0028
+[IQL] Step 1000/1000, V Loss: 0.0002, Q Loss: 0.0033
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_00.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_00.png
 
 [RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 0)
-[OPE] Behavior policy value J_old = 0.2632
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
+[OPE] AM-Q eval uses episode-start states: 9 unique episodes, 100 batch(es) x 256.
+[OPE] Behavior policy value J_old = 0.6379
+[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 4.00e-06
 [Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 68 mini-batches, 17370 samples, raw advantage mean=-0.0067, std=0.0078
-[Offline RL] Epoch 0/3, PPO Loss: -0.0284, PostKL: 5.247e-02, PostClipFrac: 0.298530, PostMeanRatio: 0.995786, PostRatioDev: 1.942e-01, GradNorm: 17.5871, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0078, PostKL: 5.223e-02, PostClipFrac: 0.269868, PostMeanRatio: 0.997292, PostRatioDev: 1.832e-01, GradNorm: 17.6725, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0051, PostKL: 5.577e-02, PostClipFrac: 0.276185, PostMeanRatio: 0.995021, PostRatioDev: 1.851e-01, GradNorm: 16.1219, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Fixed PPO buffer ready: 7 mini-batches, 1737 samples, raw advantage mean=-0.0206, std=0.0142
+[Offline RL] Cap PPO steps: requested 1000, using 56 (8 passes over 7 fixed PPO batches).
+[Offline RL] Step 7/56, PPO Loss: -0.0394, PostKL: 6.692e-02, PostClipFrac: 0.356355, PostMeanRatio: 0.991875, PostRatioDev: 2.254e-01, GradNorm: 27.3847, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 14/56, PPO Loss: -0.0036, PostKL: 6.298e-02, PostClipFrac: 0.317171, PostMeanRatio: 0.989268, PostRatioDev: 2.058e-01, GradNorm: 21.2163, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 21/56, PPO Loss: 0.0151, PostKL: 5.800e-02, PostClipFrac: 0.310660, PostMeanRatio: 0.983265, PostRatioDev: 1.963e-01, GradNorm: 21.3648, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 28/56, PPO Loss: 0.0345, PostKL: 5.569e-02, PostClipFrac: 0.288306, PostMeanRatio: 0.984308, PostRatioDev: 1.861e-01, GradNorm: 16.6363, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 35/56, PPO Loss: 0.0455, PostKL: 6.004e-02, PostClipFrac: 0.306245, PostMeanRatio: 0.984295, PostRatioDev: 1.934e-01, GradNorm: 17.3905, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 42/56, PPO Loss: 0.0555, PostKL: 6.143e-02, PostClipFrac: 0.303371, PostMeanRatio: 0.985124, PostRatioDev: 1.926e-01, GradNorm: 15.7735, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 49/56, PPO Loss: 0.0646, PostKL: 6.156e-02, PostClipFrac: 0.313095, PostMeanRatio: 0.985666, PostRatioDev: 1.963e-01, GradNorm: 15.2138, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 56/56, PPO Loss: 0.0695, PostKL: 6.453e-02, PostClipFrac: 0.336426, PostMeanRatio: 0.988455, PostRatioDev: 2.058e-01, GradNorm: 18.9971, Reg Loss: 0.0000, CD Loss: 0.0000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_00.png
-[OPE] Policy REJECTED: J_new=0.2631 ≤ J_old=0.2632 + δ=0.0026. Rolling back to behavior policy.
+[OPE] Policy ACCEPTED: J_new=0.6412 > J_old=0.6379 + δ=0.0000
 
 [RL100Trainer] Phase 2c: Collecting New Data (Iteration 0)
-[Collect] 20 episodes, success=0.700, env_return=1067.19, rl_reward=0.70, steps=4000
-[Data Collection] Success Rate: 0.700, EnvReturn: 1067.19, RLReward: 0.70, Episodes: 20, Steps: 4000
+[Collect] 50 episodes, success=0.780, env_return=845.54, rl_reward=0.78, steps=10000
+[Data Collection] Success Rate: 0.780, EnvReturn: 845.54, RLReward: 0.78, Episodes: 50, Steps: 10000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 14/20 successful episodes (drops 6 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 24000 steps, 120 episodes
+[Dataset] offline collection: all 50 episodes remain in RL replay; IL retrain keeps 39/50 successful episodes (drops 11 failures).
+[Dataset] Merged 50 episodes (10000 steps) → total 12000 steps, 60 episodes
 
 [RL100Trainer] Retraining IL on merged dataset...
 
@@ -411,109 +562,111 @@ Class name: RL100Policy
 ============================================================
 
 [BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0503, Val Loss: 0.0124
-[IL] Epoch 1/100, Loss: 0.0141, Val Loss: 0.0106
-[IL] Epoch 2/100, Loss: 0.0118, Val Loss: 0.0095
-[IL] Epoch 3/100, Loss: 0.0107, Val Loss: 0.0092
-[IL] Epoch 4/100, Loss: 0.0098, Val Loss: 0.0079
-[IL] Epoch 5/100, Loss: 0.0091, Val Loss: 0.0092
-[IL] Epoch 6/100, Loss: 0.0094, Val Loss: 0.0091
-[IL] Epoch 7/100, Loss: 0.0087, Val Loss: 0.0103
-[IL] Epoch 8/100, Loss: 0.0087, Val Loss: 0.0109
-[IL] Epoch 9/100, Loss: 0.0081, Val Loss: 0.0096
-[IL] Epoch 10/100, Loss: 0.0085, Val Loss: 0.0069
-[IL] Epoch 11/100, Loss: 0.0075, Val Loss: 0.0065
-[IL] Epoch 12/100, Loss: 0.0069, Val Loss: 0.0072
-[IL] Epoch 13/100, Loss: 0.0070, Val Loss: 0.0059
-[IL] Epoch 14/100, Loss: 0.0067, Val Loss: 0.0069
-[IL] Epoch 15/100, Loss: 0.0064, Val Loss: 0.0089
-[IL] Epoch 16/100, Loss: 0.0078, Val Loss: 0.0073
-[IL] Epoch 17/100, Loss: 0.0067, Val Loss: 0.0071
-[IL] Epoch 18/100, Loss: 0.0068, Val Loss: 0.0094
-[IL] Epoch 19/100, Loss: 0.0069, Val Loss: 0.0043
-[IL] Epoch 20/100, Loss: 0.0065, Val Loss: 0.0049
-[IL] Epoch 21/100, Loss: 0.0061, Val Loss: 0.0056
-[IL] Epoch 22/100, Loss: 0.0062, Val Loss: 0.0071
-[IL] Epoch 23/100, Loss: 0.0069, Val Loss: 0.0094
-[IL] Epoch 24/100, Loss: 0.0068, Val Loss: 0.0075
-[IL] Epoch 25/100, Loss: 0.0063, Val Loss: 0.0102
-[IL] Epoch 26/100, Loss: 0.0061, Val Loss: 0.0076
-[IL] Epoch 27/100, Loss: 0.0069, Val Loss: 0.0074
-[IL] Epoch 28/100, Loss: 0.0061, Val Loss: 0.0084
-[IL] Epoch 29/100, Loss: 0.0063, Val Loss: 0.0087
-[IL] Epoch 30/100, Loss: 0.0061, Val Loss: 0.0077
-[IL] Epoch 31/100, Loss: 0.0062, Val Loss: 0.0073
-[IL] Epoch 32/100, Loss: 0.0060, Val Loss: 0.0084
-[IL] Epoch 33/100, Loss: 0.0065, Val Loss: 0.0078
-[IL] Epoch 34/100, Loss: 0.0054, Val Loss: 0.0085
-[IL] Epoch 35/100, Loss: 0.0058, Val Loss: 0.0090
-[IL] Epoch 36/100, Loss: 0.0057, Val Loss: 0.0083
-[IL] Epoch 37/100, Loss: 0.0054, Val Loss: 0.0062
-[IL] Epoch 38/100, Loss: 0.0052, Val Loss: 0.0079
-[IL] Epoch 39/100, Loss: 0.0055, Val Loss: 0.0075
-[IL] Epoch 40/100, Loss: 0.0060, Val Loss: 0.0083
-[IL] Epoch 41/100, Loss: 0.0062, Val Loss: 0.0057
-[IL] Epoch 42/100, Loss: 0.0059, Val Loss: 0.0073
-[IL] Epoch 43/100, Loss: 0.0061, Val Loss: 0.0083
-[IL] Epoch 44/100, Loss: 0.0062, Val Loss: 0.0075
-[IL] Epoch 45/100, Loss: 0.0055, Val Loss: 0.0082
-[IL] Epoch 46/100, Loss: 0.0051, Val Loss: 0.0073
-[IL] Epoch 47/100, Loss: 0.0055, Val Loss: 0.0075
-[IL] Epoch 48/100, Loss: 0.0058, Val Loss: 0.0067
-[IL] Epoch 49/100, Loss: 0.0058, Val Loss: 0.0051
-[IL] Epoch 50/100, Loss: 0.0056, Val Loss: 0.0080
-[IL] Epoch 51/100, Loss: 0.0052, Val Loss: 0.0067
-[IL] Epoch 52/100, Loss: 0.0056, Val Loss: 0.0086
-[IL] Epoch 53/100, Loss: 0.0057, Val Loss: 0.0090
-[IL] Epoch 54/100, Loss: 0.0052, Val Loss: 0.0082
-[IL] Epoch 55/100, Loss: 0.0058, Val Loss: 0.0085
-[IL] Epoch 56/100, Loss: 0.0051, Val Loss: 0.0071
-[IL] Epoch 57/100, Loss: 0.0051, Val Loss: 0.0087
-[IL] Epoch 58/100, Loss: 0.0053, Val Loss: 0.0070
-[IL] Epoch 59/100, Loss: 0.0048, Val Loss: 0.0101
-[IL] Epoch 60/100, Loss: 0.0053, Val Loss: 0.0077
-[IL] Epoch 61/100, Loss: 0.0050, Val Loss: 0.0077
-[IL] Epoch 62/100, Loss: 0.0048, Val Loss: 0.0091
-[IL] Epoch 63/100, Loss: 0.0051, Val Loss: 0.0078
-[IL] Epoch 64/100, Loss: 0.0052, Val Loss: 0.0068
-[IL] Epoch 65/100, Loss: 0.0051, Val Loss: 0.0073
-[IL] Epoch 66/100, Loss: 0.0056, Val Loss: 0.0080
-[IL] Epoch 67/100, Loss: 0.0056, Val Loss: 0.0064
-[IL] Epoch 68/100, Loss: 0.0046, Val Loss: 0.0100
-[IL] Epoch 69/100, Loss: 0.0058, Val Loss: 0.0065
-[IL] Epoch 70/100, Loss: 0.0058, Val Loss: 0.0060
-[IL] Epoch 71/100, Loss: 0.0050, Val Loss: 0.0083
-[IL] Epoch 72/100, Loss: 0.0050, Val Loss: 0.0087
-[IL] Epoch 73/100, Loss: 0.0048, Val Loss: 0.0081
-[IL] Epoch 74/100, Loss: 0.0053, Val Loss: 0.0077
-[IL] Epoch 75/100, Loss: 0.0045, Val Loss: 0.0070
-[IL] Epoch 76/100, Loss: 0.0047, Val Loss: 0.0084
-[IL] Epoch 77/100, Loss: 0.0047, Val Loss: 0.0063
-[IL] Epoch 78/100, Loss: 0.0044, Val Loss: 0.0077
-[IL] Epoch 79/100, Loss: 0.0046, Val Loss: 0.0077
-[IL] Epoch 80/100, Loss: 0.0045, Val Loss: 0.0059
-[IL] Epoch 81/100, Loss: 0.0045, Val Loss: 0.0069
-[IL] Epoch 82/100, Loss: 0.0049, Val Loss: 0.0061
-[IL] Epoch 83/100, Loss: 0.0049, Val Loss: 0.0071
-[IL] Epoch 84/100, Loss: 0.0050, Val Loss: 0.0139
-[IL] Epoch 85/100, Loss: 0.0048, Val Loss: 0.0071
-[IL] Epoch 86/100, Loss: 0.0050, Val Loss: 0.0058
-[IL] Epoch 87/100, Loss: 0.0049, Val Loss: 0.0072
-[IL] Epoch 88/100, Loss: 0.0049, Val Loss: 0.0082
-[IL] Epoch 89/100, Loss: 0.0043, Val Loss: 0.0089
-[IL] Epoch 90/100, Loss: 0.0053, Val Loss: 0.0075
-[IL] Epoch 91/100, Loss: 0.0052, Val Loss: 0.0088
-[IL] Epoch 92/100, Loss: 0.0044, Val Loss: 0.0069
-[IL] Epoch 93/100, Loss: 0.0047, Val Loss: 0.0063
-[IL] Epoch 94/100, Loss: 0.0051, Val Loss: 0.0069
-[IL] Epoch 95/100, Loss: 0.0049, Val Loss: 0.0065
-[IL] Epoch 96/100, Loss: 0.0051, Val Loss: 0.0112
-[IL] Epoch 97/100, Loss: 0.0048, Val Loss: 0.0084
-[IL] Epoch 98/100, Loss: 0.0046, Val Loss: 0.0123
-[IL] Epoch 99/100, Loss: 0.0044, Val Loss: 0.0066
-test_mean_score: 0.45
-[IL] Eval - Success Rate: 0.450
+[IL] Epoch 0/100, Loss: 0.0415, Val Loss: 0.0496
+[IL] Epoch 1/100, Loss: 0.0226, Val Loss: 0.0534
+[IL] Epoch 2/100, Loss: 0.0211, Val Loss: 0.0371
+[IL] Epoch 3/100, Loss: 0.0205, Val Loss: 0.0422
+[IL] Epoch 4/100, Loss: 0.0194, Val Loss: 0.0531
+[IL] Epoch 5/100, Loss: 0.0188, Val Loss: 0.0529
+[IL] Epoch 6/100, Loss: 0.0197, Val Loss: 0.0572
+[IL] Epoch 7/100, Loss: 0.0186, Val Loss: 0.0710
+[IL] Epoch 8/100, Loss: 0.0189, Val Loss: 0.0617
+[IL] Epoch 9/100, Loss: 0.0191, Val Loss: 0.0566
+[IL] Epoch 10/100, Loss: 0.0178, Val Loss: 0.0685
+[IL] Epoch 11/100, Loss: 0.0181, Val Loss: 0.0522
+[IL] Epoch 12/100, Loss: 0.0189, Val Loss: 0.0517
+[IL] Epoch 13/100, Loss: 0.0186, Val Loss: 0.0515
+[IL] Epoch 14/100, Loss: 0.0181, Val Loss: 0.0590
+[IL] Epoch 15/100, Loss: 0.0171, Val Loss: 0.0821
+[IL] Epoch 16/100, Loss: 0.0176, Val Loss: 0.0517
+[IL] Epoch 17/100, Loss: 0.0173, Val Loss: 0.0509
+[IL] Epoch 18/100, Loss: 0.0173, Val Loss: 0.0469
+[IL] Epoch 19/100, Loss: 0.0168, Val Loss: 0.0533
+[IL] Epoch 20/100, Loss: 0.0168, Val Loss: 0.0662
+[IL] Epoch 21/100, Loss: 0.0163, Val Loss: 0.0575
+[IL] Epoch 22/100, Loss: 0.0168, Val Loss: 0.0598
+[IL] Epoch 23/100, Loss: 0.0168, Val Loss: 0.0565
+[IL] Epoch 24/100, Loss: 0.0166, Val Loss: 0.0526
+[IL] Epoch 25/100, Loss: 0.0161, Val Loss: 0.0563
+[IL] Epoch 26/100, Loss: 0.0168, Val Loss: 0.0500
+[IL] Epoch 27/100, Loss: 0.0162, Val Loss: 0.0631
+[IL] Epoch 28/100, Loss: 0.0166, Val Loss: 0.0589
+[IL] Epoch 29/100, Loss: 0.0185, Val Loss: 0.0498
+[IL] Epoch 30/100, Loss: 0.0163, Val Loss: 0.0472
+[IL] Epoch 31/100, Loss: 0.0168, Val Loss: 0.0699
+[IL] Epoch 32/100, Loss: 0.0167, Val Loss: 0.0644
+[IL] Epoch 33/100, Loss: 0.0154, Val Loss: 0.0536
+[IL] Epoch 34/100, Loss: 0.0155, Val Loss: 0.0600
+[IL] Epoch 35/100, Loss: 0.0159, Val Loss: 0.0647
+[IL] Epoch 36/100, Loss: 0.0158, Val Loss: 0.0625
+[IL] Epoch 37/100, Loss: 0.0166, Val Loss: 0.0421
+[IL] Epoch 38/100, Loss: 0.0147, Val Loss: 0.0421
+[IL] Epoch 39/100, Loss: 0.0155, Val Loss: 0.0656
+[IL] Epoch 40/100, Loss: 0.0147, Val Loss: 0.0661
+[IL] Epoch 41/100, Loss: 0.0156, Val Loss: 0.0642
+[IL] Epoch 42/100, Loss: 0.0156, Val Loss: 0.0685
+[IL] Epoch 43/100, Loss: 0.0156, Val Loss: 0.0540
+[IL] Epoch 44/100, Loss: 0.0149, Val Loss: 0.0598
+[IL] Epoch 45/100, Loss: 0.0156, Val Loss: 0.0660
+[IL] Epoch 46/100, Loss: 0.0154, Val Loss: 0.0600
+[IL] Epoch 47/100, Loss: 0.0152, Val Loss: 0.0541
+[IL] Epoch 48/100, Loss: 0.0152, Val Loss: 0.0744
+[IL] Epoch 49/100, Loss: 0.0144, Val Loss: 0.0523
+[IL] Epoch 50/100, Loss: 0.0148, Val Loss: 0.0695
+[IL] Epoch 51/100, Loss: 0.0149, Val Loss: 0.0580
+[IL] Epoch 52/100, Loss: 0.0151, Val Loss: 0.0615
+[IL] Epoch 53/100, Loss: 0.0158, Val Loss: 0.0486
+[IL] Epoch 54/100, Loss: 0.0159, Val Loss: 0.0602
+[IL] Epoch 55/100, Loss: 0.0148, Val Loss: 0.0623
+[IL] Epoch 56/100, Loss: 0.0158, Val Loss: 0.0624
+[IL] Epoch 57/100, Loss: 0.0149, Val Loss: 0.0619
+[IL] Epoch 58/100, Loss: 0.0144, Val Loss: 0.0796
+[IL] Epoch 59/100, Loss: 0.0150, Val Loss: 0.0727
+[IL] Epoch 60/100, Loss: 0.0145, Val Loss: 0.0659
+[IL] Epoch 61/100, Loss: 0.0157, Val Loss: 0.0659
+[IL] Epoch 62/100, Loss: 0.0140, Val Loss: 0.0553
+[IL] Epoch 63/100, Loss: 0.0144, Val Loss: 0.0577
+[IL] Epoch 64/100, Loss: 0.0139, Val Loss: 0.0736
+[IL] Epoch 65/100, Loss: 0.0138, Val Loss: 0.0737
+[IL] Epoch 66/100, Loss: 0.0151, Val Loss: 0.0541
+[IL] Epoch 67/100, Loss: 0.0144, Val Loss: 0.0598
+[IL] Epoch 68/100, Loss: 0.0143, Val Loss: 0.0501
+[IL] Epoch 69/100, Loss: 0.0137, Val Loss: 0.0717
+[IL] Epoch 70/100, Loss: 0.0135, Val Loss: 0.0653
+[IL] Epoch 71/100, Loss: 0.0143, Val Loss: 0.0721
+[IL] Epoch 72/100, Loss: 0.0133, Val Loss: 0.0465
+[IL] Epoch 73/100, Loss: 0.0137, Val Loss: 0.0555
+[IL] Epoch 74/100, Loss: 0.0137, Val Loss: 0.0582
+[IL] Epoch 75/100, Loss: 0.0134, Val Loss: 0.0660
+[IL] Epoch 76/100, Loss: 0.0148, Val Loss: 0.0759
+[IL] Epoch 77/100, Loss: 0.0132, Val Loss: 0.0778
+[IL] Epoch 78/100, Loss: 0.0131, Val Loss: 0.0601
+[IL] Epoch 79/100, Loss: 0.0129, Val Loss: 0.0656
+[IL] Epoch 80/100, Loss: 0.0142, Val Loss: 0.0587
+[IL] Epoch 81/100, Loss: 0.0141, Val Loss: 0.0591
+[IL] Epoch 82/100, Loss: 0.0140, Val Loss: 0.0638
+[IL] Epoch 83/100, Loss: 0.0133, Val Loss: 0.0703
+[IL] Epoch 84/100, Loss: 0.0128, Val Loss: 0.0550
+[IL] Epoch 85/100, Loss: 0.0130, Val Loss: 0.0857
+[IL] Epoch 86/100, Loss: 0.0131, Val Loss: 0.0631
+[IL] Epoch 87/100, Loss: 0.0132, Val Loss: 0.0810
+[IL] Epoch 88/100, Loss: 0.0138, Val Loss: 0.0588
+[IL] Epoch 89/100, Loss: 0.0135, Val Loss: 0.0626
+[IL] Epoch 90/100, Loss: 0.0125, Val Loss: 0.0769
+[IL] Epoch 91/100, Loss: 0.0126, Val Loss: 0.0719
+[IL] Epoch 92/100, Loss: 0.0129, Val Loss: 0.0666
+[IL] Epoch 93/100, Loss: 0.0126, Val Loss: 0.0658
+[IL] Epoch 94/100, Loss: 0.0135, Val Loss: 0.0651
+[IL] Epoch 95/100, Loss: 0.0128, Val Loss: 0.0993
+[IL] Epoch 96/100, Loss: 0.0147, Val Loss: 0.0716
+[IL] Epoch 97/100, Loss: 0.0122, Val Loss: 0.0686
+[IL] Epoch 98/100, Loss: 0.0140, Val Loss: 0.0755
+[IL] Epoch 99/100, Loss: 0.0128, Val Loss: 0.0746
+test_mean_score: 0.73
+[IL] Eval - Success Rate: 0.730
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_00.png
+[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/best_ddim.ckpt
+[BestDDIM] Updated best DDIM checkpoint from 0.6000 to 0.7300 at offline_iter_0.
 [Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_0.ckpt
 
 ================================================================================
@@ -524,57 +677,65 @@ test_mean_score: 0.45
 [RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 1)
 
 [TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 21230 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-36.06926 | val=0.00050 | no-improve=0/5
-[TransitionModel] Epoch   20 | train=-68.30794 | val=0.00024 | no-improve=0/5
-[TransitionModel] Epoch   40 | train=-73.39562 | val=0.00023 | no-improve=0/5
-[TransitionModel] Epoch   60 | train=-77.50230 | val=0.00022 | no-improve=4/5
-[TransitionModel] Epoch   61 | train=-77.90658 | val=0.00024 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[1, 3, 6, 5, 0], val_loss=0.00021
+[TransitionModel] Dataset: 11387 samples, input_dim=288, target_dim=257
+[TransitionModel] Epoch    0 | train=21.51633 | val=0.02684 | no-improve=0/5
+[TransitionModel] Epoch   20 | train=-22.84668 | val=0.00263 | no-improve=0/5
+[TransitionModel] Epoch   40 | train=-27.95476 | val=0.00217 | no-improve=0/5
+[TransitionModel] Training complete. Elites=[2, 6, 4, 0, 5], val_loss=0.00203
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_01.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_01.png
 
 [RL100Trainer] Phase 2a: Training IQL Critics (Iteration 1)
-[IQL] Epoch 0/20, V Loss: 0.0001, Q Loss: 0.0067
-[IQL] Epoch 1/20, V Loss: 0.0002, Q Loss: 0.0066
-[IQL] Epoch 2/20, V Loss: 0.0002, Q Loss: 0.0068
-[IQL] Epoch 3/20, V Loss: 0.0003, Q Loss: 0.0067
-[IQL] Epoch 4/20, V Loss: 0.0002, Q Loss: 0.0066
-[IQL] Epoch 5/20, V Loss: 0.0002, Q Loss: 0.0065
-[IQL] Epoch 6/20, V Loss: 0.0002, Q Loss: 0.0065
-[IQL] Epoch 7/20, V Loss: 0.0002, Q Loss: 0.0064
-[IQL] Epoch 8/20, V Loss: 0.0003, Q Loss: 0.0064
-[IQL] Epoch 9/20, V Loss: 0.0001, Q Loss: 0.0063
-[IQL] Epoch 10/20, V Loss: 0.0003, Q Loss: 0.0064
-[IQL] Epoch 11/20, V Loss: 0.0003, Q Loss: 0.0064
-[IQL] Epoch 12/20, V Loss: 0.0002, Q Loss: 0.0063
-[IQL] Epoch 13/20, V Loss: 0.0002, Q Loss: 0.0063
-[IQL] Epoch 14/20, V Loss: 0.0003, Q Loss: 0.0063
-[IQL] Epoch 15/20, V Loss: 0.0002, Q Loss: 0.0062
-[IQL] Epoch 16/20, V Loss: 0.0002, Q Loss: 0.0062
-[IQL] Epoch 17/20, V Loss: 0.0003, Q Loss: 0.0061
-[IQL] Epoch 18/20, V Loss: 0.0001, Q Loss: 0.0060
-[IQL] Epoch 19/20, V Loss: 0.0002, Q Loss: 0.0060
+[IQL] Step 45/1000, V Loss: 0.0002, Q Loss: 0.0032
+[IQL] Step 90/1000, V Loss: 0.0002, Q Loss: 0.0031
+[IQL] Step 135/1000, V Loss: 0.0002, Q Loss: 0.0032
+[IQL] Step 180/1000, V Loss: 0.0002, Q Loss: 0.0031
+[IQL] Step 225/1000, V Loss: 0.0001, Q Loss: 0.0031
+[IQL] Step 270/1000, V Loss: 0.0002, Q Loss: 0.0032
+[IQL] Step 315/1000, V Loss: 0.0002, Q Loss: 0.0032
+[IQL] Step 360/1000, V Loss: 0.0001, Q Loss: 0.0031
+[IQL] Step 405/1000, V Loss: 0.0002, Q Loss: 0.0033
+[IQL] Step 450/1000, V Loss: 0.0002, Q Loss: 0.0032
+[IQL] Step 495/1000, V Loss: 0.0002, Q Loss: 0.0032
+[IQL] Step 540/1000, V Loss: 0.0003, Q Loss: 0.0033
+[IQL] Step 585/1000, V Loss: 0.0002, Q Loss: 0.0033
+[IQL] Step 630/1000, V Loss: 0.0003, Q Loss: 0.0036
+[IQL] Step 675/1000, V Loss: 0.0002, Q Loss: 0.0034
+[IQL] Step 720/1000, V Loss: 0.0001, Q Loss: 0.0033
+[IQL] Step 765/1000, V Loss: 0.0001, Q Loss: 0.0034
+[IQL] Step 810/1000, V Loss: 0.0002, Q Loss: 0.0035
+[IQL] Step 855/1000, V Loss: 0.0002, Q Loss: 0.0035
+[IQL] Step 900/1000, V Loss: 0.0005, Q Loss: 0.0039
+[IQL] Step 945/1000, V Loss: 0.0004, Q Loss: 0.0038
+[IQL] Step 990/1000, V Loss: 0.0002, Q Loss: 0.0035
+[IQL] Step 1000/1000, V Loss: 0.0007, Q Loss: 0.0051
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_01.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_01.png
 
 [RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 1)
-[OPE] Behavior policy value J_old = 0.3943
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
+[OPE] AM-Q eval uses episode-start states: 59 unique episodes, 100 batch(es) x 256.
+[OPE] Behavior policy value J_old = 0.9431
+[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 4.00e-06
 [Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 83 mini-batches, 21230 samples, raw advantage mean=0.0056, std=0.0124
-[Offline RL] Epoch 0/3, PPO Loss: -0.0398, PostKL: 5.775e-02, PostClipFrac: 0.298988, PostMeanRatio: 0.996363, PostRatioDev: 1.968e-01, GradNorm: 27.5530, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0108, PostKL: 8.086e-02, PostClipFrac: 0.287835, PostMeanRatio: 1.007448, PostRatioDev: 2.057e-01, GradNorm: 21.4160, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0063, PostKL: 7.729e-02, PostClipFrac: 0.290873, PostMeanRatio: 1.005747, PostRatioDev: 2.046e-01, GradNorm: 15.3145, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Fixed PPO buffer ready: 45 mini-batches, 11387 samples, raw advantage mean=0.0276, std=0.0071
+[Offline RL] Cap PPO steps: requested 1000, using 360 (8 passes over 45 fixed PPO batches).
+[Offline RL] Step 45/360, PPO Loss: -0.0199, PostKL: 3.101e-02, PostClipFrac: 0.224462, PostMeanRatio: 0.996974, PostRatioDev: 1.526e-01, GradNorm: 14.9390, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 90/360, PPO Loss: -0.0014, PostKL: 3.405e-02, PostClipFrac: 0.217697, PostMeanRatio: 0.998582, PostRatioDev: 1.515e-01, GradNorm: 13.6157, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 135/360, PPO Loss: 0.0097, PostKL: 3.676e-02, PostClipFrac: 0.220234, PostMeanRatio: 1.000047, PostRatioDev: 1.534e-01, GradNorm: 13.2884, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 180/360, PPO Loss: 0.0195, PostKL: 3.425e-02, PostClipFrac: 0.214734, PostMeanRatio: 0.999235, PostRatioDev: 1.488e-01, GradNorm: 12.8166, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 225/360, PPO Loss: 0.0250, PostKL: 3.622e-02, PostClipFrac: 0.222052, PostMeanRatio: 1.002247, PostRatioDev: 1.546e-01, GradNorm: 13.2183, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 270/360, PPO Loss: 0.0301, PostKL: 3.772e-02, PostClipFrac: 0.233101, PostMeanRatio: 1.002453, PostRatioDev: 1.590e-01, GradNorm: 12.8823, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 315/360, PPO Loss: 0.0355, PostKL: 3.955e-02, PostClipFrac: 0.246268, PostMeanRatio: 1.005090, PostRatioDev: 1.653e-01, GradNorm: 12.7617, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 360/360, PPO Loss: 0.0393, PostKL: 4.000e-02, PostClipFrac: 0.246380, PostMeanRatio: 1.006359, PostRatioDev: 1.656e-01, GradNorm: 12.1648, Reg Loss: 0.0000, CD Loss: 0.0000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_01.png
-[OPE] Policy REJECTED: J_new=0.3943 ≤ J_old=0.3943 + δ=0.0039. Rolling back to behavior policy.
+[OPE] Policy ACCEPTED: J_new=0.9431 > J_old=0.9431 + δ=0.0000
 
 [RL100Trainer] Phase 2c: Collecting New Data (Iteration 1)
-[Collect] 20 episodes, success=0.800, env_return=1049.10, rl_reward=0.80, steps=4000
-[Data Collection] Success Rate: 0.800, EnvReturn: 1049.10, RLReward: 0.80, Episodes: 20, Steps: 4000
+[Collect] 50 episodes, success=0.760, env_return=852.07, rl_reward=0.76, steps=10000
+[Data Collection] Success Rate: 0.760, EnvReturn: 852.07, RLReward: 0.76, Episodes: 50, Steps: 10000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 16/20 successful episodes (drops 4 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 28000 steps, 140 episodes
+[Dataset] offline collection: all 50 episodes remain in RL replay; IL retrain keeps 38/50 successful episodes (drops 12 failures).
+[Dataset] Merged 50 episodes (10000 steps) → total 22000 steps, 110 episodes
 
 [RL100Trainer] Retraining IL on merged dataset...
 
@@ -583,109 +744,111 @@ test_mean_score: 0.45
 ============================================================
 
 [BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0083, Val Loss: 0.0073
-[IL] Epoch 1/100, Loss: 0.0068, Val Loss: 0.0095
-[IL] Epoch 2/100, Loss: 0.0063, Val Loss: 0.0069
-[IL] Epoch 3/100, Loss: 0.0070, Val Loss: 0.0075
-[IL] Epoch 4/100, Loss: 0.0063, Val Loss: 0.0072
-[IL] Epoch 5/100, Loss: 0.0063, Val Loss: 0.0067
-[IL] Epoch 6/100, Loss: 0.0063, Val Loss: 0.0076
-[IL] Epoch 7/100, Loss: 0.0061, Val Loss: 0.0064
-[IL] Epoch 8/100, Loss: 0.0065, Val Loss: 0.0078
-[IL] Epoch 9/100, Loss: 0.0059, Val Loss: 0.0052
-[IL] Epoch 10/100, Loss: 0.0066, Val Loss: 0.0096
-[IL] Epoch 11/100, Loss: 0.0061, Val Loss: 0.0072
-[IL] Epoch 12/100, Loss: 0.0057, Val Loss: 0.0083
-[IL] Epoch 13/100, Loss: 0.0055, Val Loss: 0.0102
-[IL] Epoch 14/100, Loss: 0.0053, Val Loss: 0.0099
-[IL] Epoch 15/100, Loss: 0.0060, Val Loss: 0.0082
-[IL] Epoch 16/100, Loss: 0.0059, Val Loss: 0.0073
-[IL] Epoch 17/100, Loss: 0.0055, Val Loss: 0.0114
-[IL] Epoch 18/100, Loss: 0.0060, Val Loss: 0.0074
-[IL] Epoch 19/100, Loss: 0.0057, Val Loss: 0.0082
-[IL] Epoch 20/100, Loss: 0.0057, Val Loss: 0.0068
-[IL] Epoch 21/100, Loss: 0.0058, Val Loss: 0.0090
-[IL] Epoch 22/100, Loss: 0.0056, Val Loss: 0.0096
-[IL] Epoch 23/100, Loss: 0.0056, Val Loss: 0.0087
-[IL] Epoch 24/100, Loss: 0.0057, Val Loss: 0.0091
-[IL] Epoch 25/100, Loss: 0.0054, Val Loss: 0.0096
-[IL] Epoch 26/100, Loss: 0.0049, Val Loss: 0.0082
-[IL] Epoch 27/100, Loss: 0.0054, Val Loss: 0.0069
-[IL] Epoch 28/100, Loss: 0.0057, Val Loss: 0.0097
-[IL] Epoch 29/100, Loss: 0.0058, Val Loss: 0.0087
-[IL] Epoch 30/100, Loss: 0.0056, Val Loss: 0.0074
-[IL] Epoch 31/100, Loss: 0.0053, Val Loss: 0.0076
-[IL] Epoch 32/100, Loss: 0.0056, Val Loss: 0.0062
-[IL] Epoch 33/100, Loss: 0.0052, Val Loss: 0.0061
-[IL] Epoch 34/100, Loss: 0.0051, Val Loss: 0.0050
-[IL] Epoch 35/100, Loss: 0.0054, Val Loss: 0.0084
-[IL] Epoch 36/100, Loss: 0.0052, Val Loss: 0.0074
-[IL] Epoch 37/100, Loss: 0.0058, Val Loss: 0.0077
-[IL] Epoch 38/100, Loss: 0.0055, Val Loss: 0.0074
-[IL] Epoch 39/100, Loss: 0.0055, Val Loss: 0.0058
-[IL] Epoch 40/100, Loss: 0.0056, Val Loss: 0.0102
-[IL] Epoch 41/100, Loss: 0.0051, Val Loss: 0.0082
-[IL] Epoch 42/100, Loss: 0.0056, Val Loss: 0.0098
-[IL] Epoch 43/100, Loss: 0.0053, Val Loss: 0.0082
-[IL] Epoch 44/100, Loss: 0.0047, Val Loss: 0.0091
-[IL] Epoch 45/100, Loss: 0.0048, Val Loss: 0.0083
-[IL] Epoch 46/100, Loss: 0.0047, Val Loss: 0.0072
-[IL] Epoch 47/100, Loss: 0.0051, Val Loss: 0.0068
-[IL] Epoch 48/100, Loss: 0.0050, Val Loss: 0.0088
-[IL] Epoch 49/100, Loss: 0.0051, Val Loss: 0.0081
-[IL] Epoch 50/100, Loss: 0.0051, Val Loss: 0.0075
-[IL] Epoch 51/100, Loss: 0.0049, Val Loss: 0.0053
-[IL] Epoch 52/100, Loss: 0.0048, Val Loss: 0.0079
-[IL] Epoch 53/100, Loss: 0.0053, Val Loss: 0.0074
-[IL] Epoch 54/100, Loss: 0.0053, Val Loss: 0.0126
-[IL] Epoch 55/100, Loss: 0.0054, Val Loss: 0.0069
-[IL] Epoch 56/100, Loss: 0.0052, Val Loss: 0.0079
-[IL] Epoch 57/100, Loss: 0.0050, Val Loss: 0.0085
-[IL] Epoch 58/100, Loss: 0.0046, Val Loss: 0.0079
-[IL] Epoch 59/100, Loss: 0.0052, Val Loss: 0.0082
-[IL] Epoch 60/100, Loss: 0.0047, Val Loss: 0.0097
-[IL] Epoch 61/100, Loss: 0.0048, Val Loss: 0.0071
-[IL] Epoch 62/100, Loss: 0.0044, Val Loss: 0.0098
-[IL] Epoch 63/100, Loss: 0.0051, Val Loss: 0.0075
-[IL] Epoch 64/100, Loss: 0.0054, Val Loss: 0.0067
-[IL] Epoch 65/100, Loss: 0.0048, Val Loss: 0.0093
-[IL] Epoch 66/100, Loss: 0.0049, Val Loss: 0.0075
-[IL] Epoch 67/100, Loss: 0.0045, Val Loss: 0.0063
-[IL] Epoch 68/100, Loss: 0.0047, Val Loss: 0.0068
-[IL] Epoch 69/100, Loss: 0.0050, Val Loss: 0.0097
-[IL] Epoch 70/100, Loss: 0.0050, Val Loss: 0.0088
-[IL] Epoch 71/100, Loss: 0.0051, Val Loss: 0.0066
-[IL] Epoch 72/100, Loss: 0.0046, Val Loss: 0.0089
-[IL] Epoch 73/100, Loss: 0.0050, Val Loss: 0.0093
-[IL] Epoch 74/100, Loss: 0.0054, Val Loss: 0.0095
-[IL] Epoch 75/100, Loss: 0.0044, Val Loss: 0.0091
-[IL] Epoch 76/100, Loss: 0.0046, Val Loss: 0.0097
-[IL] Epoch 77/100, Loss: 0.0044, Val Loss: 0.0059
-[IL] Epoch 78/100, Loss: 0.0046, Val Loss: 0.0111
-[IL] Epoch 79/100, Loss: 0.0049, Val Loss: 0.0108
-[IL] Epoch 80/100, Loss: 0.0044, Val Loss: 0.0098
-[IL] Epoch 81/100, Loss: 0.0052, Val Loss: 0.0060
-[IL] Epoch 82/100, Loss: 0.0044, Val Loss: 0.0065
-[IL] Epoch 83/100, Loss: 0.0045, Val Loss: 0.0089
-[IL] Epoch 84/100, Loss: 0.0042, Val Loss: 0.0067
-[IL] Epoch 85/100, Loss: 0.0046, Val Loss: 0.0096
-[IL] Epoch 86/100, Loss: 0.0045, Val Loss: 0.0115
-[IL] Epoch 87/100, Loss: 0.0052, Val Loss: 0.0078
-[IL] Epoch 88/100, Loss: 0.0048, Val Loss: 0.0092
-[IL] Epoch 89/100, Loss: 0.0044, Val Loss: 0.0052
-[IL] Epoch 90/100, Loss: 0.0049, Val Loss: 0.0059
-[IL] Epoch 91/100, Loss: 0.0045, Val Loss: 0.0110
-[IL] Epoch 92/100, Loss: 0.0052, Val Loss: 0.0102
-[IL] Epoch 93/100, Loss: 0.0045, Val Loss: 0.0092
-[IL] Epoch 94/100, Loss: 0.0048, Val Loss: 0.0095
-[IL] Epoch 95/100, Loss: 0.0049, Val Loss: 0.0096
-[IL] Epoch 96/100, Loss: 0.0045, Val Loss: 0.0082
-[IL] Epoch 97/100, Loss: 0.0047, Val Loss: 0.0071
-[IL] Epoch 98/100, Loss: 0.0045, Val Loss: 0.0076
-[IL] Epoch 99/100, Loss: 0.0039, Val Loss: 0.0077
-test_mean_score: 0.65
-[IL] Eval - Success Rate: 0.650
+[IL] Epoch 0/100, Loss: 0.0200, Val Loss: 0.0674
+[IL] Epoch 1/100, Loss: 0.0157, Val Loss: 0.0634
+[IL] Epoch 2/100, Loss: 0.0149, Val Loss: 0.0583
+[IL] Epoch 3/100, Loss: 0.0150, Val Loss: 0.0708
+[IL] Epoch 4/100, Loss: 0.0145, Val Loss: 0.0728
+[IL] Epoch 5/100, Loss: 0.0143, Val Loss: 0.0570
+[IL] Epoch 6/100, Loss: 0.0144, Val Loss: 0.0703
+[IL] Epoch 7/100, Loss: 0.0147, Val Loss: 0.0585
+[IL] Epoch 8/100, Loss: 0.0148, Val Loss: 0.0594
+[IL] Epoch 9/100, Loss: 0.0143, Val Loss: 0.0626
+[IL] Epoch 10/100, Loss: 0.0145, Val Loss: 0.0743
+[IL] Epoch 11/100, Loss: 0.0149, Val Loss: 0.0826
+[IL] Epoch 12/100, Loss: 0.0147, Val Loss: 0.0895
+[IL] Epoch 13/100, Loss: 0.0138, Val Loss: 0.0626
+[IL] Epoch 14/100, Loss: 0.0147, Val Loss: 0.0699
+[IL] Epoch 15/100, Loss: 0.0141, Val Loss: 0.0690
+[IL] Epoch 16/100, Loss: 0.0145, Val Loss: 0.0587
+[IL] Epoch 17/100, Loss: 0.0137, Val Loss: 0.0583
+[IL] Epoch 18/100, Loss: 0.0138, Val Loss: 0.0764
+[IL] Epoch 19/100, Loss: 0.0139, Val Loss: 0.0720
+[IL] Epoch 20/100, Loss: 0.0134, Val Loss: 0.0711
+[IL] Epoch 21/100, Loss: 0.0138, Val Loss: 0.0696
+[IL] Epoch 22/100, Loss: 0.0138, Val Loss: 0.0609
+[IL] Epoch 23/100, Loss: 0.0137, Val Loss: 0.0680
+[IL] Epoch 24/100, Loss: 0.0139, Val Loss: 0.0693
+[IL] Epoch 25/100, Loss: 0.0136, Val Loss: 0.0680
+[IL] Epoch 26/100, Loss: 0.0140, Val Loss: 0.0824
+[IL] Epoch 27/100, Loss: 0.0136, Val Loss: 0.0612
+[IL] Epoch 28/100, Loss: 0.0129, Val Loss: 0.0732
+[IL] Epoch 29/100, Loss: 0.0133, Val Loss: 0.0550
+[IL] Epoch 30/100, Loss: 0.0135, Val Loss: 0.0746
+[IL] Epoch 31/100, Loss: 0.0142, Val Loss: 0.0777
+[IL] Epoch 32/100, Loss: 0.0135, Val Loss: 0.0891
+[IL] Epoch 33/100, Loss: 0.0133, Val Loss: 0.0769
+[IL] Epoch 34/100, Loss: 0.0135, Val Loss: 0.0639
+[IL] Epoch 35/100, Loss: 0.0129, Val Loss: 0.0810
+[IL] Epoch 36/100, Loss: 0.0130, Val Loss: 0.0737
+[IL] Epoch 37/100, Loss: 0.0134, Val Loss: 0.0694
+[IL] Epoch 38/100, Loss: 0.0133, Val Loss: 0.0780
+[IL] Epoch 39/100, Loss: 0.0130, Val Loss: 0.0574
+[IL] Epoch 40/100, Loss: 0.0128, Val Loss: 0.0855
+[IL] Epoch 41/100, Loss: 0.0128, Val Loss: 0.0887
+[IL] Epoch 42/100, Loss: 0.0132, Val Loss: 0.0787
+[IL] Epoch 43/100, Loss: 0.0131, Val Loss: 0.0781
+[IL] Epoch 44/100, Loss: 0.0129, Val Loss: 0.0696
+[IL] Epoch 45/100, Loss: 0.0129, Val Loss: 0.0671
+[IL] Epoch 46/100, Loss: 0.0132, Val Loss: 0.0920
+[IL] Epoch 47/100, Loss: 0.0130, Val Loss: 0.0603
+[IL] Epoch 48/100, Loss: 0.0127, Val Loss: 0.0736
+[IL] Epoch 49/100, Loss: 0.0129, Val Loss: 0.0989
+[IL] Epoch 50/100, Loss: 0.0126, Val Loss: 0.0744
+[IL] Epoch 51/100, Loss: 0.0125, Val Loss: 0.0994
+[IL] Epoch 52/100, Loss: 0.0124, Val Loss: 0.0647
+[IL] Epoch 53/100, Loss: 0.0126, Val Loss: 0.0835
+[IL] Epoch 54/100, Loss: 0.0127, Val Loss: 0.0833
+[IL] Epoch 55/100, Loss: 0.0129, Val Loss: 0.0942
+[IL] Epoch 56/100, Loss: 0.0126, Val Loss: 0.0866
+[IL] Epoch 57/100, Loss: 0.0128, Val Loss: 0.0626
+[IL] Epoch 58/100, Loss: 0.0124, Val Loss: 0.0798
+[IL] Epoch 59/100, Loss: 0.0118, Val Loss: 0.0785
+[IL] Epoch 60/100, Loss: 0.0123, Val Loss: 0.0737
+[IL] Epoch 61/100, Loss: 0.0122, Val Loss: 0.0817
+[IL] Epoch 62/100, Loss: 0.0122, Val Loss: 0.0820
+[IL] Epoch 63/100, Loss: 0.0123, Val Loss: 0.0888
+[IL] Epoch 64/100, Loss: 0.0124, Val Loss: 0.0920
+[IL] Epoch 65/100, Loss: 0.0125, Val Loss: 0.0780
+[IL] Epoch 66/100, Loss: 0.0120, Val Loss: 0.0792
+[IL] Epoch 67/100, Loss: 0.0119, Val Loss: 0.1106
+[IL] Epoch 68/100, Loss: 0.0116, Val Loss: 0.1066
+[IL] Epoch 69/100, Loss: 0.0118, Val Loss: 0.0825
+[IL] Epoch 70/100, Loss: 0.0116, Val Loss: 0.0966
+[IL] Epoch 71/100, Loss: 0.0118, Val Loss: 0.0915
+[IL] Epoch 72/100, Loss: 0.0118, Val Loss: 0.0872
+[IL] Epoch 73/100, Loss: 0.0117, Val Loss: 0.0742
+[IL] Epoch 74/100, Loss: 0.0118, Val Loss: 0.0885
+[IL] Epoch 75/100, Loss: 0.0119, Val Loss: 0.0716
+[IL] Epoch 76/100, Loss: 0.0123, Val Loss: 0.0842
+[IL] Epoch 77/100, Loss: 0.0120, Val Loss: 0.0596
+[IL] Epoch 78/100, Loss: 0.0120, Val Loss: 0.0801
+[IL] Epoch 79/100, Loss: 0.0120, Val Loss: 0.0895
+[IL] Epoch 80/100, Loss: 0.0123, Val Loss: 0.0747
+[IL] Epoch 81/100, Loss: 0.0114, Val Loss: 0.0868
+[IL] Epoch 82/100, Loss: 0.0118, Val Loss: 0.0888
+[IL] Epoch 83/100, Loss: 0.0111, Val Loss: 0.0993
+[IL] Epoch 84/100, Loss: 0.0119, Val Loss: 0.0803
+[IL] Epoch 85/100, Loss: 0.0116, Val Loss: 0.0850
+[IL] Epoch 86/100, Loss: 0.0118, Val Loss: 0.0773
+[IL] Epoch 87/100, Loss: 0.0115, Val Loss: 0.1052
+[IL] Epoch 88/100, Loss: 0.0111, Val Loss: 0.0863
+[IL] Epoch 89/100, Loss: 0.0111, Val Loss: 0.0919
+[IL] Epoch 90/100, Loss: 0.0115, Val Loss: 0.0777
+[IL] Epoch 91/100, Loss: 0.0111, Val Loss: 0.0773
+[IL] Epoch 92/100, Loss: 0.0105, Val Loss: 0.0906
+[IL] Epoch 93/100, Loss: 0.0112, Val Loss: 0.0790
+[IL] Epoch 94/100, Loss: 0.0108, Val Loss: 0.0994
+[IL] Epoch 95/100, Loss: 0.0116, Val Loss: 0.0844
+[IL] Epoch 96/100, Loss: 0.0109, Val Loss: 0.0851
+[IL] Epoch 97/100, Loss: 0.0110, Val Loss: 0.0768
+[IL] Epoch 98/100, Loss: 0.0104, Val Loss: 0.1036
+[IL] Epoch 99/100, Loss: 0.0111, Val Loss: 0.1067
+test_mean_score: 0.8
+[IL] Eval - Success Rate: 0.800
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_01.png
+[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/best_ddim.ckpt
+[BestDDIM] Updated best DDIM checkpoint from 0.7300 to 0.8000 at offline_iter_1.
 [Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_1.ckpt
 
 ================================================================================
@@ -696,55 +859,55 @@ test_mean_score: 0.65
 [RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 2)
 
 [TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 25090 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-69.48351 | val=0.00045 | no-improve=0/5
-[TransitionModel] Epoch   20 | train=-81.72370 | val=0.00039 | no-improve=3/5
-[TransitionModel] Epoch   27 | train=-83.84827 | val=0.00037 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[6, 3, 4, 1, 2], val_loss=0.00034
+[TransitionModel] Dataset: 21037 samples, input_dim=288, target_dim=257
+[TransitionModel] Epoch    0 | train=-27.86191 | val=0.00232 | no-improve=0/5
+[TransitionModel] Epoch   20 | train=-35.41321 | val=0.00186 | no-improve=0/5
+[TransitionModel] Epoch   40 | train=-40.68650 | val=0.00160 | no-improve=0/5
+[TransitionModel] Training complete. Elites=[1, 2, 3, 0, 4], val_loss=0.00152
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_02.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_02.png
 
 [RL100Trainer] Phase 2a: Training IQL Critics (Iteration 2)
-[IQL] Epoch 0/20, V Loss: 0.0002, Q Loss: 0.0059
-[IQL] Epoch 1/20, V Loss: 0.0003, Q Loss: 0.0060
-[IQL] Epoch 2/20, V Loss: 0.0002, Q Loss: 0.0059
-[IQL] Epoch 3/20, V Loss: 0.0003, Q Loss: 0.0058
-[IQL] Epoch 4/20, V Loss: 0.0003, Q Loss: 0.0058
-[IQL] Epoch 5/20, V Loss: 0.0002, Q Loss: 0.0058
-[IQL] Epoch 6/20, V Loss: 0.0003, Q Loss: 0.0057
-[IQL] Epoch 7/20, V Loss: 0.0002, Q Loss: 0.0058
-[IQL] Epoch 8/20, V Loss: 0.0002, Q Loss: 0.0056
-[IQL] Epoch 9/20, V Loss: 0.0002, Q Loss: 0.0056
-[IQL] Epoch 10/20, V Loss: 0.0002, Q Loss: 0.0057
-[IQL] Epoch 11/20, V Loss: 0.0002, Q Loss: 0.0056
-[IQL] Epoch 12/20, V Loss: 0.0001, Q Loss: 0.0055
-[IQL] Epoch 13/20, V Loss: 0.0003, Q Loss: 0.0056
-[IQL] Epoch 14/20, V Loss: 0.0002, Q Loss: 0.0055
-[IQL] Epoch 15/20, V Loss: 0.0002, Q Loss: 0.0056
-[IQL] Epoch 16/20, V Loss: 0.0002, Q Loss: 0.0055
-[IQL] Epoch 17/20, V Loss: 0.0003, Q Loss: 0.0056
-[IQL] Epoch 18/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 19/20, V Loss: 0.0002, Q Loss: 0.0055
+[IQL] Step 83/1000, V Loss: 0.0002, Q Loss: 0.0036
+[IQL] Step 166/1000, V Loss: 0.0001, Q Loss: 0.0037
+[IQL] Step 249/1000, V Loss: 0.0001, Q Loss: 0.0036
+[IQL] Step 332/1000, V Loss: 0.0002, Q Loss: 0.0038
+[IQL] Step 415/1000, V Loss: 0.0001, Q Loss: 0.0037
+[IQL] Step 498/1000, V Loss: 0.0001, Q Loss: 0.0037
+[IQL] Step 581/1000, V Loss: 0.0002, Q Loss: 0.0038
+[IQL] Step 664/1000, V Loss: 0.0002, Q Loss: 0.0038
+[IQL] Step 747/1000, V Loss: 0.0002, Q Loss: 0.0039
+[IQL] Step 830/1000, V Loss: 0.0001, Q Loss: 0.0039
+[IQL] Step 913/1000, V Loss: 0.0001, Q Loss: 0.0039
+[IQL] Step 996/1000, V Loss: 0.0002, Q Loss: 0.0040
+[IQL] Step 1000/1000, V Loss: 0.0000, Q Loss: 0.0036
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_02.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_02.png
 
 [RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 2)
-[OPE] Behavior policy value J_old = 0.3821
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
+[OPE] AM-Q eval uses episode-start states: 109 unique episodes, 100 batch(es) x 256.
+[OPE] Behavior policy value J_old = 0.7531
+[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 4.00e-06
 [Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 99 mini-batches, 25090 samples, raw advantage mean=0.0044, std=0.0094
-[Offline RL] Epoch 0/3, PPO Loss: -0.0356, PostKL: 6.157e-02, PostClipFrac: 0.294854, PostMeanRatio: 0.992339, PostRatioDev: 1.935e-01, GradNorm: 19.8459, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0123, PostKL: 1.021e-01, PostClipFrac: 0.290382, PostMeanRatio: 1.012604, PostRatioDev: 2.180e-01, GradNorm: 17.1577, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0048, PostKL: 9.285e-02, PostClipFrac: 0.283946, PostMeanRatio: 1.001146, PostRatioDev: 2.045e-01, GradNorm: 15.5801, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Fixed PPO buffer ready: 83 mini-batches, 21037 samples, raw advantage mean=-0.0208, std=0.0058
+[Offline RL] Cap PPO steps: requested 1000, using 664 (8 passes over 83 fixed PPO batches).
+[Offline RL] Step 83/664, PPO Loss: -0.0172, PostKL: 3.714e-02, PostClipFrac: 0.201364, PostMeanRatio: 0.997293, PostRatioDev: 1.427e-01, GradNorm: 17.3481, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 166/664, PPO Loss: -0.0003, PostKL: 4.980e-02, PostClipFrac: 0.196821, PostMeanRatio: 0.992922, PostRatioDev: 1.407e-01, GradNorm: 14.7061, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 249/664, PPO Loss: 0.0092, PostKL: 4.611e-02, PostClipFrac: 0.198545, PostMeanRatio: 0.990914, PostRatioDev: 1.405e-01, GradNorm: 13.2300, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 332/664, PPO Loss: 0.0156, PostKL: 4.637e-02, PostClipFrac: 0.201943, PostMeanRatio: 0.991062, PostRatioDev: 1.429e-01, GradNorm: 13.5201, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 415/664, PPO Loss: 0.0223, PostKL: 4.604e-02, PostClipFrac: 0.198700, PostMeanRatio: 0.989921, PostRatioDev: 1.413e-01, GradNorm: 13.4378, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 498/664, PPO Loss: 0.0264, PostKL: 4.679e-02, PostClipFrac: 0.202885, PostMeanRatio: 0.990368, PostRatioDev: 1.435e-01, GradNorm: 12.4704, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 581/664, PPO Loss: 0.0302, PostKL: 4.798e-02, PostClipFrac: 0.214510, PostMeanRatio: 0.990575, PostRatioDev: 1.491e-01, GradNorm: 12.1129, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 664/664, PPO Loss: 0.0334, PostKL: 5.207e-02, PostClipFrac: 0.225748, PostMeanRatio: 0.990637, PostRatioDev: 1.543e-01, GradNorm: 12.5252, Reg Loss: 0.0000, CD Loss: 0.0000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_02.png
-[OPE] Policy REJECTED: J_new=0.3822 ≤ J_old=0.3821 + δ=0.0038. Rolling back to behavior policy.
+[OPE] Policy ACCEPTED: J_new=0.7531 > J_old=0.7531 + δ=0.0000
 
 [RL100Trainer] Phase 2c: Collecting New Data (Iteration 2)
-[Collect] 20 episodes, success=1.000, env_return=1145.66, rl_reward=1.00, steps=4000
-[Data Collection] Success Rate: 1.000, EnvReturn: 1145.66, RLReward: 1.00, Episodes: 20, Steps: 4000
+[Collect] 50 episodes, success=0.700, env_return=847.88, rl_reward=0.70, steps=10000
+[Data Collection] Success Rate: 0.700, EnvReturn: 847.88, RLReward: 0.70, Episodes: 50, Steps: 10000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 20/20 successful episodes (drops 0 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 32000 steps, 160 episodes
+[Dataset] offline collection: all 50 episodes remain in RL replay; IL retrain keeps 35/50 successful episodes (drops 15 failures).
+[Dataset] Merged 50 episodes (10000 steps) → total 32000 steps, 160 episodes
 
 [RL100Trainer] Retraining IL on merged dataset...
 
@@ -753,109 +916,111 @@ test_mean_score: 0.65
 ============================================================
 
 [BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0068, Val Loss: 0.0078
-[IL] Epoch 1/100, Loss: 0.0058, Val Loss: 0.0084
-[IL] Epoch 2/100, Loss: 0.0063, Val Loss: 0.0075
-[IL] Epoch 3/100, Loss: 0.0061, Val Loss: 0.0073
-[IL] Epoch 4/100, Loss: 0.0058, Val Loss: 0.0094
-[IL] Epoch 5/100, Loss: 0.0058, Val Loss: 0.0088
-[IL] Epoch 6/100, Loss: 0.0057, Val Loss: 0.0083
-[IL] Epoch 7/100, Loss: 0.0057, Val Loss: 0.0086
-[IL] Epoch 8/100, Loss: 0.0060, Val Loss: 0.0101
-[IL] Epoch 9/100, Loss: 0.0059, Val Loss: 0.0069
-[IL] Epoch 10/100, Loss: 0.0059, Val Loss: 0.0111
-[IL] Epoch 11/100, Loss: 0.0055, Val Loss: 0.0065
-[IL] Epoch 12/100, Loss: 0.0053, Val Loss: 0.0082
-[IL] Epoch 13/100, Loss: 0.0054, Val Loss: 0.0072
-[IL] Epoch 14/100, Loss: 0.0053, Val Loss: 0.0080
-[IL] Epoch 15/100, Loss: 0.0053, Val Loss: 0.0079
-[IL] Epoch 16/100, Loss: 0.0055, Val Loss: 0.0092
-[IL] Epoch 17/100, Loss: 0.0050, Val Loss: 0.0104
-[IL] Epoch 18/100, Loss: 0.0051, Val Loss: 0.0086
-[IL] Epoch 19/100, Loss: 0.0052, Val Loss: 0.0132
-[IL] Epoch 20/100, Loss: 0.0051, Val Loss: 0.0081
-[IL] Epoch 21/100, Loss: 0.0050, Val Loss: 0.0113
-[IL] Epoch 22/100, Loss: 0.0054, Val Loss: 0.0100
-[IL] Epoch 23/100, Loss: 0.0050, Val Loss: 0.0115
-[IL] Epoch 24/100, Loss: 0.0051, Val Loss: 0.0128
-[IL] Epoch 25/100, Loss: 0.0052, Val Loss: 0.0094
-[IL] Epoch 26/100, Loss: 0.0051, Val Loss: 0.0070
-[IL] Epoch 27/100, Loss: 0.0053, Val Loss: 0.0101
-[IL] Epoch 28/100, Loss: 0.0048, Val Loss: 0.0050
-[IL] Epoch 29/100, Loss: 0.0047, Val Loss: 0.0083
-[IL] Epoch 30/100, Loss: 0.0051, Val Loss: 0.0066
-[IL] Epoch 31/100, Loss: 0.0053, Val Loss: 0.0083
-[IL] Epoch 32/100, Loss: 0.0051, Val Loss: 0.0088
-[IL] Epoch 33/100, Loss: 0.0048, Val Loss: 0.0076
-[IL] Epoch 34/100, Loss: 0.0052, Val Loss: 0.0099
-[IL] Epoch 35/100, Loss: 0.0048, Val Loss: 0.0079
-[IL] Epoch 36/100, Loss: 0.0051, Val Loss: 0.0067
-[IL] Epoch 37/100, Loss: 0.0051, Val Loss: 0.0072
-[IL] Epoch 38/100, Loss: 0.0050, Val Loss: 0.0106
-[IL] Epoch 39/100, Loss: 0.0049, Val Loss: 0.0085
-[IL] Epoch 40/100, Loss: 0.0049, Val Loss: 0.0065
-[IL] Epoch 41/100, Loss: 0.0051, Val Loss: 0.0079
-[IL] Epoch 42/100, Loss: 0.0048, Val Loss: 0.0082
-[IL] Epoch 43/100, Loss: 0.0051, Val Loss: 0.0079
-[IL] Epoch 44/100, Loss: 0.0050, Val Loss: 0.0054
-[IL] Epoch 45/100, Loss: 0.0047, Val Loss: 0.0105
-[IL] Epoch 46/100, Loss: 0.0047, Val Loss: 0.0073
-[IL] Epoch 47/100, Loss: 0.0047, Val Loss: 0.0094
-[IL] Epoch 48/100, Loss: 0.0045, Val Loss: 0.0065
-[IL] Epoch 49/100, Loss: 0.0047, Val Loss: 0.0108
-[IL] Epoch 50/100, Loss: 0.0046, Val Loss: 0.0107
-[IL] Epoch 51/100, Loss: 0.0042, Val Loss: 0.0110
-[IL] Epoch 52/100, Loss: 0.0048, Val Loss: 0.0116
-[IL] Epoch 53/100, Loss: 0.0050, Val Loss: 0.0091
-[IL] Epoch 54/100, Loss: 0.0046, Val Loss: 0.0080
-[IL] Epoch 55/100, Loss: 0.0046, Val Loss: 0.0062
-[IL] Epoch 56/100, Loss: 0.0044, Val Loss: 0.0133
-[IL] Epoch 57/100, Loss: 0.0044, Val Loss: 0.0088
-[IL] Epoch 58/100, Loss: 0.0044, Val Loss: 0.0072
-[IL] Epoch 59/100, Loss: 0.0047, Val Loss: 0.0072
-[IL] Epoch 60/100, Loss: 0.0047, Val Loss: 0.0077
-[IL] Epoch 61/100, Loss: 0.0054, Val Loss: 0.0087
-[IL] Epoch 62/100, Loss: 0.0046, Val Loss: 0.0113
-[IL] Epoch 63/100, Loss: 0.0043, Val Loss: 0.0092
-[IL] Epoch 64/100, Loss: 0.0045, Val Loss: 0.0101
-[IL] Epoch 65/100, Loss: 0.0044, Val Loss: 0.0082
-[IL] Epoch 66/100, Loss: 0.0043, Val Loss: 0.0083
-[IL] Epoch 67/100, Loss: 0.0047, Val Loss: 0.0117
-[IL] Epoch 68/100, Loss: 0.0043, Val Loss: 0.0082
-[IL] Epoch 69/100, Loss: 0.0040, Val Loss: 0.0073
-[IL] Epoch 70/100, Loss: 0.0044, Val Loss: 0.0087
-[IL] Epoch 71/100, Loss: 0.0043, Val Loss: 0.0137
-[IL] Epoch 72/100, Loss: 0.0043, Val Loss: 0.0090
-[IL] Epoch 73/100, Loss: 0.0046, Val Loss: 0.0140
-[IL] Epoch 74/100, Loss: 0.0048, Val Loss: 0.0068
-[IL] Epoch 75/100, Loss: 0.0044, Val Loss: 0.0075
-[IL] Epoch 76/100, Loss: 0.0045, Val Loss: 0.0109
-[IL] Epoch 77/100, Loss: 0.0044, Val Loss: 0.0101
-[IL] Epoch 78/100, Loss: 0.0048, Val Loss: 0.0100
-[IL] Epoch 79/100, Loss: 0.0045, Val Loss: 0.0062
-[IL] Epoch 80/100, Loss: 0.0045, Val Loss: 0.0084
-[IL] Epoch 81/100, Loss: 0.0044, Val Loss: 0.0059
-[IL] Epoch 82/100, Loss: 0.0044, Val Loss: 0.0108
-[IL] Epoch 83/100, Loss: 0.0046, Val Loss: 0.0070
-[IL] Epoch 84/100, Loss: 0.0042, Val Loss: 0.0072
-[IL] Epoch 85/100, Loss: 0.0038, Val Loss: 0.0079
-[IL] Epoch 86/100, Loss: 0.0042, Val Loss: 0.0065
-[IL] Epoch 87/100, Loss: 0.0039, Val Loss: 0.0091
-[IL] Epoch 88/100, Loss: 0.0039, Val Loss: 0.0080
-[IL] Epoch 89/100, Loss: 0.0041, Val Loss: 0.0063
-[IL] Epoch 90/100, Loss: 0.0041, Val Loss: 0.0065
-[IL] Epoch 91/100, Loss: 0.0044, Val Loss: 0.0048
-[IL] Epoch 92/100, Loss: 0.0045, Val Loss: 0.0076
-[IL] Epoch 93/100, Loss: 0.0042, Val Loss: 0.0090
-[IL] Epoch 94/100, Loss: 0.0047, Val Loss: 0.0093
-[IL] Epoch 95/100, Loss: 0.0042, Val Loss: 0.0065
-[IL] Epoch 96/100, Loss: 0.0042, Val Loss: 0.0094
-[IL] Epoch 97/100, Loss: 0.0039, Val Loss: 0.0071
-[IL] Epoch 98/100, Loss: 0.0040, Val Loss: 0.0082
-[IL] Epoch 99/100, Loss: 0.0040, Val Loss: 0.0110
-test_mean_score: 0.71
-[IL] Eval - Success Rate: 0.710
+[IL] Epoch 0/100, Loss: 0.0140, Val Loss: 0.0749
+[IL] Epoch 1/100, Loss: 0.0121, Val Loss: 0.0716
+[IL] Epoch 2/100, Loss: 0.0128, Val Loss: 0.0814
+[IL] Epoch 3/100, Loss: 0.0121, Val Loss: 0.0865
+[IL] Epoch 4/100, Loss: 0.0123, Val Loss: 0.0705
+[IL] Epoch 5/100, Loss: 0.0116, Val Loss: 0.0863
+[IL] Epoch 6/100, Loss: 0.0122, Val Loss: 0.0582
+[IL] Epoch 7/100, Loss: 0.0120, Val Loss: 0.0733
+[IL] Epoch 8/100, Loss: 0.0119, Val Loss: 0.0844
+[IL] Epoch 9/100, Loss: 0.0120, Val Loss: 0.1063
+[IL] Epoch 10/100, Loss: 0.0119, Val Loss: 0.1015
+[IL] Epoch 11/100, Loss: 0.0120, Val Loss: 0.0674
+[IL] Epoch 12/100, Loss: 0.0117, Val Loss: 0.0839
+[IL] Epoch 13/100, Loss: 0.0120, Val Loss: 0.0655
+[IL] Epoch 14/100, Loss: 0.0117, Val Loss: 0.0723
+[IL] Epoch 15/100, Loss: 0.0119, Val Loss: 0.0966
+[IL] Epoch 16/100, Loss: 0.0118, Val Loss: 0.1172
+[IL] Epoch 17/100, Loss: 0.0111, Val Loss: 0.1112
+[IL] Epoch 18/100, Loss: 0.0111, Val Loss: 0.0860
+[IL] Epoch 19/100, Loss: 0.0111, Val Loss: 0.1027
+[IL] Epoch 20/100, Loss: 0.0112, Val Loss: 0.0775
+[IL] Epoch 21/100, Loss: 0.0111, Val Loss: 0.0927
+[IL] Epoch 22/100, Loss: 0.0111, Val Loss: 0.0876
+[IL] Epoch 23/100, Loss: 0.0112, Val Loss: 0.0776
+[IL] Epoch 24/100, Loss: 0.0109, Val Loss: 0.0760
+[IL] Epoch 25/100, Loss: 0.0110, Val Loss: 0.0893
+[IL] Epoch 26/100, Loss: 0.0118, Val Loss: 0.0843
+[IL] Epoch 27/100, Loss: 0.0115, Val Loss: 0.0816
+[IL] Epoch 28/100, Loss: 0.0108, Val Loss: 0.0772
+[IL] Epoch 29/100, Loss: 0.0110, Val Loss: 0.1130
+[IL] Epoch 30/100, Loss: 0.0110, Val Loss: 0.0909
+[IL] Epoch 31/100, Loss: 0.0106, Val Loss: 0.0799
+[IL] Epoch 32/100, Loss: 0.0108, Val Loss: 0.0794
+[IL] Epoch 33/100, Loss: 0.0119, Val Loss: 0.0882
+[IL] Epoch 34/100, Loss: 0.0111, Val Loss: 0.1034
+[IL] Epoch 35/100, Loss: 0.0105, Val Loss: 0.0759
+[IL] Epoch 36/100, Loss: 0.0111, Val Loss: 0.0886
+[IL] Epoch 37/100, Loss: 0.0106, Val Loss: 0.1044
+[IL] Epoch 38/100, Loss: 0.0114, Val Loss: 0.1128
+[IL] Epoch 39/100, Loss: 0.0112, Val Loss: 0.0913
+[IL] Epoch 40/100, Loss: 0.0105, Val Loss: 0.0859
+[IL] Epoch 41/100, Loss: 0.0103, Val Loss: 0.1033
+[IL] Epoch 42/100, Loss: 0.0105, Val Loss: 0.0851
+[IL] Epoch 43/100, Loss: 0.0103, Val Loss: 0.0977
+[IL] Epoch 44/100, Loss: 0.0105, Val Loss: 0.0875
+[IL] Epoch 45/100, Loss: 0.0108, Val Loss: 0.0883
+[IL] Epoch 46/100, Loss: 0.0105, Val Loss: 0.1147
+[IL] Epoch 47/100, Loss: 0.0101, Val Loss: 0.1000
+[IL] Epoch 48/100, Loss: 0.0111, Val Loss: 0.1065
+[IL] Epoch 49/100, Loss: 0.0106, Val Loss: 0.1033
+[IL] Epoch 50/100, Loss: 0.0105, Val Loss: 0.0931
+[IL] Epoch 51/100, Loss: 0.0108, Val Loss: 0.0890
+[IL] Epoch 52/100, Loss: 0.0100, Val Loss: 0.1216
+[IL] Epoch 53/100, Loss: 0.0110, Val Loss: 0.0806
+[IL] Epoch 54/100, Loss: 0.0104, Val Loss: 0.1085
+[IL] Epoch 55/100, Loss: 0.0098, Val Loss: 0.1201
+[IL] Epoch 56/100, Loss: 0.0100, Val Loss: 0.0933
+[IL] Epoch 57/100, Loss: 0.0103, Val Loss: 0.1067
+[IL] Epoch 58/100, Loss: 0.0104, Val Loss: 0.0969
+[IL] Epoch 59/100, Loss: 0.0108, Val Loss: 0.0771
+[IL] Epoch 60/100, Loss: 0.0101, Val Loss: 0.1029
+[IL] Epoch 61/100, Loss: 0.0108, Val Loss: 0.0962
+[IL] Epoch 62/100, Loss: 0.0100, Val Loss: 0.0798
+[IL] Epoch 63/100, Loss: 0.0097, Val Loss: 0.1032
+[IL] Epoch 64/100, Loss: 0.0102, Val Loss: 0.1016
+[IL] Epoch 65/100, Loss: 0.0104, Val Loss: 0.0988
+[IL] Epoch 66/100, Loss: 0.0100, Val Loss: 0.1069
+[IL] Epoch 67/100, Loss: 0.0108, Val Loss: 0.1063
+[IL] Epoch 68/100, Loss: 0.0103, Val Loss: 0.1168
+[IL] Epoch 69/100, Loss: 0.0094, Val Loss: 0.0941
+[IL] Epoch 70/100, Loss: 0.0093, Val Loss: 0.0939
+[IL] Epoch 71/100, Loss: 0.0100, Val Loss: 0.1239
+[IL] Epoch 72/100, Loss: 0.0101, Val Loss: 0.1833
+[IL] Epoch 73/100, Loss: 0.0094, Val Loss: 0.0838
+[IL] Epoch 74/100, Loss: 0.0097, Val Loss: 0.1284
+[IL] Epoch 75/100, Loss: 0.0094, Val Loss: 0.1188
+[IL] Epoch 76/100, Loss: 0.0096, Val Loss: 0.1211
+[IL] Epoch 77/100, Loss: 0.0098, Val Loss: 0.1370
+[IL] Epoch 78/100, Loss: 0.0097, Val Loss: 0.1102
+[IL] Epoch 79/100, Loss: 0.0097, Val Loss: 0.1046
+[IL] Epoch 80/100, Loss: 0.0098, Val Loss: 0.1426
+[IL] Epoch 81/100, Loss: 0.0094, Val Loss: 0.1321
+[IL] Epoch 82/100, Loss: 0.0094, Val Loss: 0.1044
+[IL] Epoch 83/100, Loss: 0.0095, Val Loss: 0.1235
+[IL] Epoch 84/100, Loss: 0.0096, Val Loss: 0.1497
+[IL] Epoch 85/100, Loss: 0.0092, Val Loss: 0.0953
+[IL] Epoch 86/100, Loss: 0.0095, Val Loss: 0.1008
+[IL] Epoch 87/100, Loss: 0.0095, Val Loss: 0.1091
+[IL] Epoch 88/100, Loss: 0.0096, Val Loss: 0.1089
+[IL] Epoch 89/100, Loss: 0.0088, Val Loss: 0.1147
+[IL] Epoch 90/100, Loss: 0.0096, Val Loss: 0.0992
+[IL] Epoch 91/100, Loss: 0.0091, Val Loss: 0.1192
+[IL] Epoch 92/100, Loss: 0.0092, Val Loss: 0.1184
+[IL] Epoch 93/100, Loss: 0.0095, Val Loss: 0.1097
+[IL] Epoch 94/100, Loss: 0.0095, Val Loss: 0.1045
+[IL] Epoch 95/100, Loss: 0.0093, Val Loss: 0.1164
+[IL] Epoch 96/100, Loss: 0.0093, Val Loss: 0.1212
+[IL] Epoch 97/100, Loss: 0.0088, Val Loss: 0.1105
+[IL] Epoch 98/100, Loss: 0.0092, Val Loss: 0.1180
+[IL] Epoch 99/100, Loss: 0.0088, Val Loss: 0.1080
+test_mean_score: 0.87
+[IL] Eval - Success Rate: 0.870
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_02.png
+[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/best_ddim.ckpt
+[BestDDIM] Updated best DDIM checkpoint from 0.8000 to 0.8700 at offline_iter_2.
 [Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_2.ckpt
 
 ================================================================================
@@ -866,54 +1031,51 @@ test_mean_score: 0.71
 [RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 3)
 
 [TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 28950 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-78.95151 | val=0.00032 | no-improve=0/5
-[TransitionModel] Epoch   11 | train=-85.99391 | val=0.00033 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[2, 1, 3, 5, 4], val_loss=0.00027
+[TransitionModel] Dataset: 30687 samples, input_dim=288, target_dim=257
+[TransitionModel] Epoch    0 | train=-41.20499 | val=0.00193 | no-improve=0/5
+[TransitionModel] Epoch   20 | train=-48.89771 | val=0.00161 | no-improve=0/5
+[TransitionModel] Epoch   40 | train=-55.50157 | val=0.00149 | no-improve=1/5
+[TransitionModel] Training complete. Elites=[1, 3, 0, 4, 2], val_loss=0.00146
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_03.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_03.png
 
 [RL100Trainer] Phase 2a: Training IQL Critics (Iteration 3)
-[IQL] Epoch 0/20, V Loss: 0.0002, Q Loss: 0.0057
-[IQL] Epoch 1/20, V Loss: 0.0001, Q Loss: 0.0056
-[IQL] Epoch 2/20, V Loss: 0.0002, Q Loss: 0.0056
-[IQL] Epoch 3/20, V Loss: 0.0002, Q Loss: 0.0056
-[IQL] Epoch 4/20, V Loss: 0.0002, Q Loss: 0.0055
-[IQL] Epoch 5/20, V Loss: 0.0002, Q Loss: 0.0055
-[IQL] Epoch 6/20, V Loss: 0.0003, Q Loss: 0.0056
-[IQL] Epoch 7/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 8/20, V Loss: 0.0002, Q Loss: 0.0056
-[IQL] Epoch 9/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 10/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 11/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 12/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 13/20, V Loss: 0.0002, Q Loss: 0.0058
-[IQL] Epoch 14/20, V Loss: 0.0003, Q Loss: 0.0055
-[IQL] Epoch 15/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 16/20, V Loss: 0.0002, Q Loss: 0.0053
-[IQL] Epoch 17/20, V Loss: 0.0002, Q Loss: 0.0057
-[IQL] Epoch 18/20, V Loss: 0.0003, Q Loss: 0.0061
-[IQL] Epoch 19/20, V Loss: 0.0005, Q Loss: 0.0057
+[IQL] Step 120/1000, V Loss: 0.0002, Q Loss: 0.0040
+[IQL] Step 240/1000, V Loss: 0.0001, Q Loss: 0.0040
+[IQL] Step 360/1000, V Loss: 0.0001, Q Loss: 0.0041
+[IQL] Step 480/1000, V Loss: 0.0001, Q Loss: 0.0041
+[IQL] Step 600/1000, V Loss: 0.0001, Q Loss: 0.0041
+[IQL] Step 720/1000, V Loss: 0.0001, Q Loss: 0.0042
+[IQL] Step 840/1000, V Loss: 0.0001, Q Loss: 0.0043
+[IQL] Step 960/1000, V Loss: 0.0001, Q Loss: 0.0043
+[IQL] Step 1000/1000, V Loss: 0.0001, Q Loss: 0.0045
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_03.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_03.png
 
 [RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 3)
-[OPE] Behavior policy value J_old = 0.4184
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
+[OPE] AM-Q eval uses episode-start states: 159 unique episodes, 100 batch(es) x 256.
+[OPE] Behavior policy value J_old = 0.6081
+[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 4.00e-06
 [Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 114 mini-batches, 28950 samples, raw advantage mean=-0.0030, std=0.0153
-[Offline RL] Epoch 0/3, PPO Loss: -0.0275, PostKL: 6.638e-02, PostClipFrac: 0.314794, PostMeanRatio: 0.996136, PostRatioDev: 2.060e-01, GradNorm: 18.1557, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0055, PostKL: 9.536e-02, PostClipFrac: 0.301024, PostMeanRatio: 1.018323, PostRatioDev: 2.206e-01, GradNorm: 14.7459, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0087, PostKL: 8.281e-02, PostClipFrac: 0.279486, PostMeanRatio: 1.014482, PostRatioDev: 2.017e-01, GradNorm: 14.3654, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Fixed PPO buffer ready: 120 mini-batches, 30687 samples, raw advantage mean=-0.0169, std=0.0041
+[Offline RL] Cap PPO steps: requested 1000, using 960 (8 passes over 120 fixed PPO batches).
+[Offline RL] Step 120/960, PPO Loss: -0.0113, PostKL: 1.762e-02, PostClipFrac: 0.152651, PostMeanRatio: 0.998735, PostRatioDev: 1.148e-01, GradNorm: 12.8221, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 240/960, PPO Loss: 0.0025, PostKL: 2.218e-02, PostClipFrac: 0.151469, PostMeanRatio: 0.998692, PostRatioDev: 1.163e-01, GradNorm: 12.9340, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 360/960, PPO Loss: 0.0095, PostKL: 2.337e-02, PostClipFrac: 0.160553, PostMeanRatio: 0.998957, PostRatioDev: 1.212e-01, GradNorm: 12.0969, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 480/960, PPO Loss: 0.0159, PostKL: 2.423e-02, PostClipFrac: 0.162460, PostMeanRatio: 1.000292, PostRatioDev: 1.231e-01, GradNorm: 11.8975, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 600/960, PPO Loss: 0.0203, PostKL: 2.660e-02, PostClipFrac: 0.173879, PostMeanRatio: 1.001425, PostRatioDev: 1.302e-01, GradNorm: 12.5905, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 720/960, PPO Loss: 0.0245, PostKL: 2.791e-02, PostClipFrac: 0.179870, PostMeanRatio: 1.002174, PostRatioDev: 1.334e-01, GradNorm: 11.5968, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 840/960, PPO Loss: 0.0277, PostKL: 3.062e-02, PostClipFrac: 0.189433, PostMeanRatio: 1.003477, PostRatioDev: 1.393e-01, GradNorm: 11.7380, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 960/960, PPO Loss: 0.0312, PostKL: 3.178e-02, PostClipFrac: 0.194868, PostMeanRatio: 1.004807, PostRatioDev: 1.423e-01, GradNorm: 11.4060, Reg Loss: 0.0000, CD Loss: 0.0000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_03.png
-[OPE] Policy REJECTED: J_new=0.4185 ≤ J_old=0.4184 + δ=0.0042. Rolling back to behavior policy.
+[OPE] Policy ACCEPTED: J_new=0.6082 > J_old=0.6081 + δ=0.0000
 
 [RL100Trainer] Phase 2c: Collecting New Data (Iteration 3)
-[Collect] 20 episodes, success=0.800, env_return=1107.54, rl_reward=0.80, steps=4000
-[Data Collection] Success Rate: 0.800, EnvReturn: 1107.54, RLReward: 0.80, Episodes: 20, Steps: 4000
+[Collect] 50 episodes, success=0.840, env_return=938.87, rl_reward=0.84, steps=10000
+[Data Collection] Success Rate: 0.840, EnvReturn: 938.87, RLReward: 0.84, Episodes: 50, Steps: 10000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 16/20 successful episodes (drops 4 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 36000 steps, 180 episodes
+[Dataset] offline collection: all 50 episodes remain in RL replay; IL retrain keeps 42/50 successful episodes (drops 8 failures).
+[Dataset] Merged 50 episodes (10000 steps) → total 42000 steps, 210 episodes
 
 [RL100Trainer] Retraining IL on merged dataset...
 
@@ -922,110 +1084,108 @@ test_mean_score: 0.71
 ============================================================
 
 [BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0113, Val Loss: 0.0098
-[IL] Epoch 1/100, Loss: 0.0062, Val Loss: 0.0068
-[IL] Epoch 2/100, Loss: 0.0056, Val Loss: 0.0096
-[IL] Epoch 3/100, Loss: 0.0053, Val Loss: 0.0108
-[IL] Epoch 4/100, Loss: 0.0056, Val Loss: 0.0064
-[IL] Epoch 5/100, Loss: 0.0055, Val Loss: 0.0073
-[IL] Epoch 6/100, Loss: 0.0054, Val Loss: 0.0112
-[IL] Epoch 7/100, Loss: 0.0049, Val Loss: 0.0090
-[IL] Epoch 8/100, Loss: 0.0052, Val Loss: 0.0071
-[IL] Epoch 9/100, Loss: 0.0053, Val Loss: 0.0085
-[IL] Epoch 10/100, Loss: 0.0048, Val Loss: 0.0070
-[IL] Epoch 11/100, Loss: 0.0055, Val Loss: 0.0112
-[IL] Epoch 12/100, Loss: 0.0052, Val Loss: 0.0127
-[IL] Epoch 13/100, Loss: 0.0049, Val Loss: 0.0070
-[IL] Epoch 14/100, Loss: 0.0050, Val Loss: 0.0087
-[IL] Epoch 15/100, Loss: 0.0054, Val Loss: 0.0111
-[IL] Epoch 16/100, Loss: 0.0051, Val Loss: 0.0088
-[IL] Epoch 17/100, Loss: 0.0050, Val Loss: 0.0136
-Extracting GPU stats logs using atop has been completed on r8a30-a06.
-Logs are being saved to: /nfs_global/S/yangrongzheng/atop-740901-r8a30-a06-gpustat.log
-[IL] Epoch 18/100, Loss: 0.0050, Val Loss: 0.0106
-[IL] Epoch 19/100, Loss: 0.0053, Val Loss: 0.0067
-[IL] Epoch 20/100, Loss: 0.0046, Val Loss: 0.0092
-[IL] Epoch 21/100, Loss: 0.0048, Val Loss: 0.0080
-[IL] Epoch 22/100, Loss: 0.0051, Val Loss: 0.0113
-[IL] Epoch 23/100, Loss: 0.0053, Val Loss: 0.0095
-[IL] Epoch 24/100, Loss: 0.0048, Val Loss: 0.0082
-[IL] Epoch 25/100, Loss: 0.0048, Val Loss: 0.0057
-[IL] Epoch 26/100, Loss: 0.0048, Val Loss: 0.0087
-[IL] Epoch 27/100, Loss: 0.0051, Val Loss: 0.0082
-[IL] Epoch 28/100, Loss: 0.0045, Val Loss: 0.0074
-[IL] Epoch 29/100, Loss: 0.0047, Val Loss: 0.0079
-[IL] Epoch 30/100, Loss: 0.0048, Val Loss: 0.0066
-[IL] Epoch 31/100, Loss: 0.0047, Val Loss: 0.0081
-[IL] Epoch 32/100, Loss: 0.0050, Val Loss: 0.0076
-[IL] Epoch 33/100, Loss: 0.0047, Val Loss: 0.0092
-[IL] Epoch 34/100, Loss: 0.0046, Val Loss: 0.0067
-[IL] Epoch 35/100, Loss: 0.0049, Val Loss: 0.0104
-[IL] Epoch 36/100, Loss: 0.0046, Val Loss: 0.0070
-[IL] Epoch 37/100, Loss: 0.0045, Val Loss: 0.0074
-[IL] Epoch 38/100, Loss: 0.0043, Val Loss: 0.0080
-[IL] Epoch 39/100, Loss: 0.0042, Val Loss: 0.0073
-[IL] Epoch 40/100, Loss: 0.0043, Val Loss: 0.0083
-[IL] Epoch 41/100, Loss: 0.0048, Val Loss: 0.0090
-[IL] Epoch 42/100, Loss: 0.0051, Val Loss: 0.0096
-[IL] Epoch 43/100, Loss: 0.0047, Val Loss: 0.0058
-[IL] Epoch 44/100, Loss: 0.0048, Val Loss: 0.0117
-[IL] Epoch 45/100, Loss: 0.0046, Val Loss: 0.0078
-[IL] Epoch 46/100, Loss: 0.0042, Val Loss: 0.0076
-[IL] Epoch 47/100, Loss: 0.0052, Val Loss: 0.0066
-[IL] Epoch 48/100, Loss: 0.0045, Val Loss: 0.0128
-[IL] Epoch 49/100, Loss: 0.0045, Val Loss: 0.0075
-[IL] Epoch 50/100, Loss: 0.0047, Val Loss: 0.0080
-[IL] Epoch 51/100, Loss: 0.0041, Val Loss: 0.0068
-[IL] Epoch 52/100, Loss: 0.0042, Val Loss: 0.0077
-[IL] Epoch 53/100, Loss: 0.0042, Val Loss: 0.0090
-[IL] Epoch 54/100, Loss: 0.0042, Val Loss: 0.0093
-[IL] Epoch 55/100, Loss: 0.0040, Val Loss: 0.0089
-[IL] Epoch 56/100, Loss: 0.0042, Val Loss: 0.0091
-[IL] Epoch 57/100, Loss: 0.0047, Val Loss: 0.0109
-[IL] Epoch 58/100, Loss: 0.0043, Val Loss: 0.0081
-[IL] Epoch 59/100, Loss: 0.0045, Val Loss: 0.0069
-[IL] Epoch 60/100, Loss: 0.0042, Val Loss: 0.0113
-[IL] Epoch 61/100, Loss: 0.0046, Val Loss: 0.0082
-[IL] Epoch 62/100, Loss: 0.0043, Val Loss: 0.0096
-[IL] Epoch 63/100, Loss: 0.0040, Val Loss: 0.0093
-[IL] Epoch 64/100, Loss: 0.0041, Val Loss: 0.0089
-[IL] Epoch 65/100, Loss: 0.0044, Val Loss: 0.0071
-[IL] Epoch 66/100, Loss: 0.0041, Val Loss: 0.0083
-[IL] Epoch 67/100, Loss: 0.0040, Val Loss: 0.0112
-[IL] Epoch 68/100, Loss: 0.0042, Val Loss: 0.0087
-[IL] Epoch 69/100, Loss: 0.0046, Val Loss: 0.0106
-[IL] Epoch 70/100, Loss: 0.0042, Val Loss: 0.0078
-[IL] Epoch 71/100, Loss: 0.0048, Val Loss: 0.0061
-[IL] Epoch 72/100, Loss: 0.0045, Val Loss: 0.0095
-[IL] Epoch 73/100, Loss: 0.0046, Val Loss: 0.0093
-[IL] Epoch 74/100, Loss: 0.0041, Val Loss: 0.0071
-[IL] Epoch 75/100, Loss: 0.0040, Val Loss: 0.0119
-[IL] Epoch 76/100, Loss: 0.0044, Val Loss: 0.0076
-[IL] Epoch 77/100, Loss: 0.0039, Val Loss: 0.0091
-[IL] Epoch 78/100, Loss: 0.0038, Val Loss: 0.0121
-[IL] Epoch 79/100, Loss: 0.0039, Val Loss: 0.0097
-[IL] Epoch 80/100, Loss: 0.0040, Val Loss: 0.0117
-[IL] Epoch 81/100, Loss: 0.0041, Val Loss: 0.0083
-[IL] Epoch 82/100, Loss: 0.0044, Val Loss: 0.0109
-[IL] Epoch 83/100, Loss: 0.0042, Val Loss: 0.0107
-[IL] Epoch 84/100, Loss: 0.0041, Val Loss: 0.0096
-[IL] Epoch 85/100, Loss: 0.0038, Val Loss: 0.0076
-[IL] Epoch 86/100, Loss: 0.0042, Val Loss: 0.0187
-[IL] Epoch 87/100, Loss: 0.0041, Val Loss: 0.0094
-[IL] Epoch 88/100, Loss: 0.0045, Val Loss: 0.0097
-[IL] Epoch 89/100, Loss: 0.0046, Val Loss: 0.0100
-[IL] Epoch 90/100, Loss: 0.0040, Val Loss: 0.0075
-[IL] Epoch 91/100, Loss: 0.0042, Val Loss: 0.0063
-[IL] Epoch 92/100, Loss: 0.0038, Val Loss: 0.0124
-[IL] Epoch 93/100, Loss: 0.0040, Val Loss: 0.0089
-[IL] Epoch 94/100, Loss: 0.0039, Val Loss: 0.0132
-[IL] Epoch 95/100, Loss: 0.0037, Val Loss: 0.0075
-[IL] Epoch 96/100, Loss: 0.0043, Val Loss: 0.0125
-[IL] Epoch 97/100, Loss: 0.0045, Val Loss: 0.0075
-[IL] Epoch 98/100, Loss: 0.0038, Val Loss: 0.0127
-[IL] Epoch 99/100, Loss: 0.0037, Val Loss: 0.0094
-test_mean_score: 0.82
-[IL] Eval - Success Rate: 0.820
+[IL] Epoch 0/100, Loss: 0.0110, Val Loss: 0.0911
+[IL] Epoch 1/100, Loss: 0.0107, Val Loss: 0.0973
+[IL] Epoch 2/100, Loss: 0.0108, Val Loss: 0.0720
+[IL] Epoch 3/100, Loss: 0.0103, Val Loss: 0.0625
+[IL] Epoch 4/100, Loss: 0.0102, Val Loss: 0.0972
+[IL] Epoch 5/100, Loss: 0.0100, Val Loss: 0.0928
+[IL] Epoch 6/100, Loss: 0.0098, Val Loss: 0.1002
+[IL] Epoch 7/100, Loss: 0.0101, Val Loss: 0.0936
+[IL] Epoch 8/100, Loss: 0.0102, Val Loss: 0.0951
+[IL] Epoch 9/100, Loss: 0.0100, Val Loss: 0.1111
+[IL] Epoch 10/100, Loss: 0.0095, Val Loss: 0.0847
+[IL] Epoch 11/100, Loss: 0.0097, Val Loss: 0.0955
+[IL] Epoch 12/100, Loss: 0.0096, Val Loss: 0.1114
+[IL] Epoch 13/100, Loss: 0.0100, Val Loss: 0.0941
+[IL] Epoch 14/100, Loss: 0.0097, Val Loss: 0.0750
+[IL] Epoch 15/100, Loss: 0.0097, Val Loss: 0.0945
+[IL] Epoch 16/100, Loss: 0.0097, Val Loss: 0.1189
+[IL] Epoch 17/100, Loss: 0.0099, Val Loss: 0.0928
+[IL] Epoch 18/100, Loss: 0.0092, Val Loss: 0.1145
+[IL] Epoch 19/100, Loss: 0.0094, Val Loss: 0.1095
+[IL] Epoch 20/100, Loss: 0.0096, Val Loss: 0.1112
+[IL] Epoch 21/100, Loss: 0.0096, Val Loss: 0.0795
+[IL] Epoch 22/100, Loss: 0.0098, Val Loss: 0.0952
+[IL] Epoch 23/100, Loss: 0.0093, Val Loss: 0.0847
+[IL] Epoch 24/100, Loss: 0.0094, Val Loss: 0.0916
+[IL] Epoch 25/100, Loss: 0.0093, Val Loss: 0.0976
+[IL] Epoch 26/100, Loss: 0.0094, Val Loss: 0.1131
+[IL] Epoch 27/100, Loss: 0.0090, Val Loss: 0.1195
+[IL] Epoch 28/100, Loss: 0.0089, Val Loss: 0.0943
+[IL] Epoch 29/100, Loss: 0.0094, Val Loss: 0.1025
+[IL] Epoch 30/100, Loss: 0.0090, Val Loss: 0.0975
+[IL] Epoch 31/100, Loss: 0.0093, Val Loss: 0.1259
+[IL] Epoch 32/100, Loss: 0.0092, Val Loss: 0.1228
+[IL] Epoch 33/100, Loss: 0.0091, Val Loss: 0.0982
+[IL] Epoch 34/100, Loss: 0.0088, Val Loss: 0.1059
+[IL] Epoch 35/100, Loss: 0.0096, Val Loss: 0.1134
+[IL] Epoch 36/100, Loss: 0.0093, Val Loss: 0.1135
+[IL] Epoch 37/100, Loss: 0.0092, Val Loss: 0.1151
+[IL] Epoch 38/100, Loss: 0.0092, Val Loss: 0.0884
+[IL] Epoch 39/100, Loss: 0.0088, Val Loss: 0.0976
+[IL] Epoch 40/100, Loss: 0.0089, Val Loss: 0.1316
+[IL] Epoch 41/100, Loss: 0.0091, Val Loss: 0.1280
+[IL] Epoch 42/100, Loss: 0.0090, Val Loss: 0.1185
+[IL] Epoch 43/100, Loss: 0.0087, Val Loss: 0.1232
+[IL] Epoch 44/100, Loss: 0.0086, Val Loss: 0.1149
+[IL] Epoch 45/100, Loss: 0.0089, Val Loss: 0.0993
+[IL] Epoch 46/100, Loss: 0.0085, Val Loss: 0.1084
+[IL] Epoch 47/100, Loss: 0.0088, Val Loss: 0.1302
+[IL] Epoch 48/100, Loss: 0.0086, Val Loss: 0.1231
+[IL] Epoch 49/100, Loss: 0.0084, Val Loss: 0.1089
+[IL] Epoch 50/100, Loss: 0.0090, Val Loss: 0.1227
+[IL] Epoch 51/100, Loss: 0.0087, Val Loss: 0.1237
+[IL] Epoch 52/100, Loss: 0.0086, Val Loss: 0.1204
+[IL] Epoch 53/100, Loss: 0.0089, Val Loss: 0.1259
+[IL] Epoch 54/100, Loss: 0.0087, Val Loss: 0.1015
+[IL] Epoch 55/100, Loss: 0.0084, Val Loss: 0.1213
+[IL] Epoch 56/100, Loss: 0.0087, Val Loss: 0.1321
+[IL] Epoch 57/100, Loss: 0.0085, Val Loss: 0.1072
+[IL] Epoch 58/100, Loss: 0.0084, Val Loss: 0.1558
+[IL] Epoch 59/100, Loss: 0.0085, Val Loss: 0.1033
+[IL] Epoch 60/100, Loss: 0.0087, Val Loss: 0.1254
+[IL] Epoch 61/100, Loss: 0.0085, Val Loss: 0.1236
+[IL] Epoch 62/100, Loss: 0.0087, Val Loss: 0.1111
+[IL] Epoch 63/100, Loss: 0.0084, Val Loss: 0.1333
+[IL] Epoch 64/100, Loss: 0.0081, Val Loss: 0.1179
+[IL] Epoch 65/100, Loss: 0.0084, Val Loss: 0.1151
+[IL] Epoch 66/100, Loss: 0.0080, Val Loss: 0.1467
+[IL] Epoch 67/100, Loss: 0.0086, Val Loss: 0.1394
+[IL] Epoch 68/100, Loss: 0.0083, Val Loss: 0.1360
+[IL] Epoch 69/100, Loss: 0.0083, Val Loss: 0.1092
+[IL] Epoch 70/100, Loss: 0.0083, Val Loss: 0.1276
+[IL] Epoch 71/100, Loss: 0.0085, Val Loss: 0.1418
+[IL] Epoch 72/100, Loss: 0.0083, Val Loss: 0.1277
+[IL] Epoch 73/100, Loss: 0.0083, Val Loss: 0.1112
+[IL] Epoch 74/100, Loss: 0.0081, Val Loss: 0.1277
+[IL] Epoch 75/100, Loss: 0.0080, Val Loss: 0.0965
+[IL] Epoch 76/100, Loss: 0.0081, Val Loss: 0.1571
+[IL] Epoch 77/100, Loss: 0.0078, Val Loss: 0.1473
+[IL] Epoch 78/100, Loss: 0.0081, Val Loss: 0.1147
+[IL] Epoch 79/100, Loss: 0.0079, Val Loss: 0.1447
+[IL] Epoch 80/100, Loss: 0.0081, Val Loss: 0.1368
+[IL] Epoch 81/100, Loss: 0.0080, Val Loss: 0.1432
+[IL] Epoch 82/100, Loss: 0.0082, Val Loss: 0.1571
+[IL] Epoch 83/100, Loss: 0.0080, Val Loss: 0.1333
+[IL] Epoch 84/100, Loss: 0.0080, Val Loss: 0.1187
+[IL] Epoch 85/100, Loss: 0.0080, Val Loss: 0.1419
+[IL] Epoch 86/100, Loss: 0.0079, Val Loss: 0.1179
+[IL] Epoch 87/100, Loss: 0.0079, Val Loss: 0.1156
+[IL] Epoch 88/100, Loss: 0.0081, Val Loss: 0.1359
+[IL] Epoch 89/100, Loss: 0.0078, Val Loss: 0.0921
+[IL] Epoch 90/100, Loss: 0.0077, Val Loss: 0.1172
+[IL] Epoch 91/100, Loss: 0.0081, Val Loss: 0.0944
+[IL] Epoch 92/100, Loss: 0.0080, Val Loss: 0.1270
+[IL] Epoch 93/100, Loss: 0.0079, Val Loss: 0.1560
+[IL] Epoch 94/100, Loss: 0.0076, Val Loss: 0.1577
+[IL] Epoch 95/100, Loss: 0.0077, Val Loss: 0.0840
+[IL] Epoch 96/100, Loss: 0.0080, Val Loss: 0.1178
+[IL] Epoch 97/100, Loss: 0.0078, Val Loss: 0.1454
+[IL] Epoch 98/100, Loss: 0.0076, Val Loss: 0.1282
+[IL] Epoch 99/100, Loss: 0.0077, Val Loss: 0.1295
+test_mean_score: 0.84
+[IL] Eval - Success Rate: 0.840
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_03.png
 [Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_3.ckpt
 
@@ -1037,55 +1197,47 @@ test_mean_score: 0.82
 [RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 4)
 
 [TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 32810 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-81.90551 | val=0.00040 | no-improve=0/5
-[TransitionModel] Epoch   20 | train=-92.38055 | val=0.00031 | no-improve=0/5
-[TransitionModel] Epoch   29 | train=-95.64887 | val=0.00030 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[2, 5, 3, 4, 0], val_loss=0.00027
+[TransitionModel] Dataset: 40337 samples, input_dim=288, target_dim=257
+[TransitionModel] Epoch    0 | train=-56.03929 | val=0.00165 | no-improve=0/5
+[TransitionModel] Epoch   20 | train=-66.16281 | val=0.00152 | no-improve=0/5
+[TransitionModel] Epoch   40 | train=-74.54797 | val=0.00145 | no-improve=0/5
+[TransitionModel] Training complete. Elites=[3, 5, 4, 2, 1], val_loss=0.00143
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_04.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_04.png
 
 [RL100Trainer] Phase 2a: Training IQL Critics (Iteration 4)
-[IQL] Epoch 0/20, V Loss: 0.0002, Q Loss: 0.0052
-[IQL] Epoch 1/20, V Loss: 0.0002, Q Loss: 0.0053
-[IQL] Epoch 2/20, V Loss: 0.0002, Q Loss: 0.0052
-[IQL] Epoch 3/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 4/20, V Loss: 0.0001, Q Loss: 0.0052
-[IQL] Epoch 5/20, V Loss: 0.0002, Q Loss: 0.0051
-[IQL] Epoch 6/20, V Loss: 0.0002, Q Loss: 0.0052
-[IQL] Epoch 7/20, V Loss: 0.0002, Q Loss: 0.0052
-[IQL] Epoch 8/20, V Loss: 0.0002, Q Loss: 0.0052
-[IQL] Epoch 9/20, V Loss: 0.0001, Q Loss: 0.0053
-[IQL] Epoch 10/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 11/20, V Loss: 0.0002, Q Loss: 0.0053
-[IQL] Epoch 12/20, V Loss: 0.0002, Q Loss: 0.0052
-[IQL] Epoch 13/20, V Loss: 0.0001, Q Loss: 0.0052
-[IQL] Epoch 14/20, V Loss: 0.0002, Q Loss: 0.0052
-[IQL] Epoch 15/20, V Loss: 0.0002, Q Loss: 0.0051
-[IQL] Epoch 16/20, V Loss: 0.0002, Q Loss: 0.0052
-[IQL] Epoch 17/20, V Loss: 0.0001, Q Loss: 0.0054
-[IQL] Epoch 18/20, V Loss: 0.0002, Q Loss: 0.0054
-[IQL] Epoch 19/20, V Loss: 0.0002, Q Loss: 0.0053
+[IQL] Step 158/1000, V Loss: 0.0001, Q Loss: 0.0045
+[IQL] Step 316/1000, V Loss: 0.0002, Q Loss: 0.0046
+[IQL] Step 474/1000, V Loss: 0.0001, Q Loss: 0.0046
+[IQL] Step 632/1000, V Loss: 0.0001, Q Loss: 0.0046
+[IQL] Step 790/1000, V Loss: 0.0001, Q Loss: 0.0047
+[IQL] Step 948/1000, V Loss: 0.0001, Q Loss: 0.0048
+[IQL] Step 1000/1000, V Loss: 0.0001, Q Loss: 0.0059
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_04.png
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_04.png
 
 [RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 4)
-[OPE] Behavior policy value J_old = 0.4639
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
+[OPE] AM-Q eval uses episode-start states: 209 unique episodes, 100 batch(es) x 256.
+[OPE] Behavior policy value J_old = 0.4986
+[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 4.00e-06
 [Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 129 mini-batches, 32810 samples, raw advantage mean=0.0058, std=0.0145
-[Offline RL] Epoch 0/3, PPO Loss: -0.0260, PostKL: 6.610e-02, PostClipFrac: 0.298769, PostMeanRatio: 0.997555, PostRatioDev: 1.987e-01, GradNorm: 16.1472, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0076, PostKL: 1.093e-01, PostClipFrac: 0.296912, PostMeanRatio: 1.027857, PostRatioDev: 2.286e-01, GradNorm: 14.0937, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0045, PostKL: 1.553e-01, PostClipFrac: 0.287328, PostMeanRatio: 1.077080, PostRatioDev: 2.701e-01, GradNorm: 13.1569, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Fixed PPO buffer ready: 158 mini-batches, 40337 samples, raw advantage mean=-0.0048, std=0.0059
+[Offline RL] Step 158/1000, PPO Loss: -0.0086, PostKL: 1.265e-02, PostClipFrac: 0.115814, PostMeanRatio: 0.999610, PostRatioDev: 9.545e-02, GradNorm: 12.9940, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 316/1000, PPO Loss: 0.0024, PostKL: 1.939e-02, PostClipFrac: 0.123860, PostMeanRatio: 1.003049, PostRatioDev: 1.034e-01, GradNorm: 12.2110, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 474/1000, PPO Loss: 0.0090, PostKL: 2.143e-02, PostClipFrac: 0.129779, PostMeanRatio: 1.005311, PostRatioDev: 1.080e-01, GradNorm: 12.2516, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 632/1000, PPO Loss: 0.0137, PostKL: 2.301e-02, PostClipFrac: 0.139790, PostMeanRatio: 1.008499, PostRatioDev: 1.145e-01, GradNorm: 12.5375, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 790/1000, PPO Loss: 0.0182, PostKL: 2.574e-02, PostClipFrac: 0.145804, PostMeanRatio: 1.011547, PostRatioDev: 1.196e-01, GradNorm: 12.4184, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 948/1000, PPO Loss: 0.0211, PostKL: 2.602e-02, PostClipFrac: 0.152883, PostMeanRatio: 1.013096, PostRatioDev: 1.235e-01, GradNorm: 12.2577, Reg Loss: 0.0000, CD Loss: 0.0000
+[Offline RL] Step 1000/1000, PPO Loss: 0.0222, PostKL: 2.831e-02, PostClipFrac: 0.161049, PostMeanRatio: 1.016330, PostRatioDev: 1.295e-01, GradNorm: 11.8956, Reg Loss: 0.0000, CD Loss: 0.0000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_04.png
-[OPE] Policy REJECTED: J_new=0.4639 ≤ J_old=0.4639 + δ=0.0046. Rolling back to behavior policy.
+[OPE] Policy REJECTED: J_new=0.4986 ≤ J_old=0.4986 + δ=0.0000. Rolling back to behavior policy.
 
 [RL100Trainer] Phase 2c: Collecting New Data (Iteration 4)
-[Collect] 20 episodes, success=0.600, env_return=980.61, rl_reward=0.60, steps=4000
-[Data Collection] Success Rate: 0.600, EnvReturn: 980.61, RLReward: 0.60, Episodes: 20, Steps: 4000
+[Collect] 50 episodes, success=0.680, env_return=857.92, rl_reward=0.68, steps=10000
+[Data Collection] Success Rate: 0.680, EnvReturn: 857.92, RLReward: 0.68, Episodes: 50, Steps: 10000
 [Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 12/20 successful episodes (drops 8 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 40000 steps, 200 episodes
+[Dataset] offline collection: all 50 episodes remain in RL replay; IL retrain keeps 34/50 successful episodes (drops 16 failures).
+[Dataset] Merged 50 episodes (10000 steps) → total 52000 steps, 260 episodes
 
 [RL100Trainer] Retraining IL on merged dataset...
 
@@ -1094,1175 +1246,105 @@ test_mean_score: 0.82
 ============================================================
 
 [BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0049, Val Loss: 0.0078
-[IL] Epoch 1/100, Loss: 0.0046, Val Loss: 0.0066
-[IL] Epoch 2/100, Loss: 0.0046, Val Loss: 0.0081
-[IL] Epoch 3/100, Loss: 0.0047, Val Loss: 0.0077
-[IL] Epoch 4/100, Loss: 0.0045, Val Loss: 0.0076
-[IL] Epoch 5/100, Loss: 0.0043, Val Loss: 0.0093
-[IL] Epoch 6/100, Loss: 0.0042, Val Loss: 0.0093
-[IL] Epoch 7/100, Loss: 0.0044, Val Loss: 0.0063
-[IL] Epoch 8/100, Loss: 0.0044, Val Loss: 0.0093
-[IL] Epoch 9/100, Loss: 0.0041, Val Loss: 0.0125
-[IL] Epoch 10/100, Loss: 0.0041, Val Loss: 0.0072
-[IL] Epoch 11/100, Loss: 0.0044, Val Loss: 0.0083
-[IL] Epoch 12/100, Loss: 0.0044, Val Loss: 0.0072
-[IL] Epoch 13/100, Loss: 0.0041, Val Loss: 0.0071
-[IL] Epoch 14/100, Loss: 0.0042, Val Loss: 0.0103
-[IL] Epoch 15/100, Loss: 0.0040, Val Loss: 0.0086
-[IL] Epoch 16/100, Loss: 0.0042, Val Loss: 0.0079
-[IL] Epoch 17/100, Loss: 0.0043, Val Loss: 0.0085
-[IL] Epoch 18/100, Loss: 0.0041, Val Loss: 0.0084
-[IL] Epoch 19/100, Loss: 0.0041, Val Loss: 0.0085
-[IL] Epoch 20/100, Loss: 0.0040, Val Loss: 0.0063
-[IL] Epoch 21/100, Loss: 0.0042, Val Loss: 0.0093
-[IL] Epoch 22/100, Loss: 0.0039, Val Loss: 0.0086
-[IL] Epoch 23/100, Loss: 0.0042, Val Loss: 0.0088
-[IL] Epoch 24/100, Loss: 0.0042, Val Loss: 0.0079
-[IL] Epoch 25/100, Loss: 0.0044, Val Loss: 0.0107
-[IL] Epoch 26/100, Loss: 0.0041, Val Loss: 0.0086
-[IL] Epoch 27/100, Loss: 0.0039, Val Loss: 0.0084
-[IL] Epoch 28/100, Loss: 0.0041, Val Loss: 0.0078
-[IL] Epoch 29/100, Loss: 0.0040, Val Loss: 0.0063
-[IL] Epoch 30/100, Loss: 0.0039, Val Loss: 0.0073
-[IL] Epoch 31/100, Loss: 0.0040, Val Loss: 0.0081
-[IL] Epoch 32/100, Loss: 0.0038, Val Loss: 0.0123
-[IL] Epoch 33/100, Loss: 0.0039, Val Loss: 0.0096
-[IL] Epoch 34/100, Loss: 0.0042, Val Loss: 0.0108
-[IL] Epoch 35/100, Loss: 0.0040, Val Loss: 0.0102
-[IL] Epoch 36/100, Loss: 0.0041, Val Loss: 0.0099
-[IL] Epoch 37/100, Loss: 0.0040, Val Loss: 0.0104
-[IL] Epoch 38/100, Loss: 0.0039, Val Loss: 0.0098
-[IL] Epoch 39/100, Loss: 0.0040, Val Loss: 0.0070
-[IL] Epoch 40/100, Loss: 0.0042, Val Loss: 0.0115
-[IL] Epoch 41/100, Loss: 0.0043, Val Loss: 0.0096
-[IL] Epoch 42/100, Loss: 0.0039, Val Loss: 0.0099
-[IL] Epoch 43/100, Loss: 0.0036, Val Loss: 0.0116
-[IL] Epoch 44/100, Loss: 0.0039, Val Loss: 0.0069
-[IL] Epoch 45/100, Loss: 0.0039, Val Loss: 0.0087
-[IL] Epoch 46/100, Loss: 0.0036, Val Loss: 0.0095
-[IL] Epoch 47/100, Loss: 0.0039, Val Loss: 0.0092
-[IL] Epoch 48/100, Loss: 0.0035, Val Loss: 0.0091
-[IL] Epoch 49/100, Loss: 0.0035, Val Loss: 0.0128
-[IL] Epoch 50/100, Loss: 0.0040, Val Loss: 0.0121
-[IL] Epoch 51/100, Loss: 0.0038, Val Loss: 0.0097
-[IL] Epoch 52/100, Loss: 0.0036, Val Loss: 0.0096
-[IL] Epoch 53/100, Loss: 0.0038, Val Loss: 0.0118
-[IL] Epoch 54/100, Loss: 0.0036, Val Loss: 0.0122
-[IL] Epoch 55/100, Loss: 0.0038, Val Loss: 0.0080
-[IL] Epoch 56/100, Loss: 0.0037, Val Loss: 0.0057
-[IL] Epoch 57/100, Loss: 0.0037, Val Loss: 0.0069
-[IL] Epoch 58/100, Loss: 0.0043, Val Loss: 0.0089
-[IL] Epoch 59/100, Loss: 0.0040, Val Loss: 0.0094
-[IL] Epoch 60/100, Loss: 0.0039, Val Loss: 0.0090
-[IL] Epoch 61/100, Loss: 0.0040, Val Loss: 0.0114
-[IL] Epoch 62/100, Loss: 0.0038, Val Loss: 0.0060
-[IL] Epoch 63/100, Loss: 0.0035, Val Loss: 0.0061
-[IL] Epoch 64/100, Loss: 0.0036, Val Loss: 0.0083
-[IL] Epoch 65/100, Loss: 0.0037, Val Loss: 0.0068
-[IL] Epoch 66/100, Loss: 0.0037, Val Loss: 0.0073
-[IL] Epoch 67/100, Loss: 0.0035, Val Loss: 0.0120
-[IL] Epoch 68/100, Loss: 0.0037, Val Loss: 0.0073
-[IL] Epoch 69/100, Loss: 0.0034, Val Loss: 0.0103
-[IL] Epoch 70/100, Loss: 0.0040, Val Loss: 0.0101
-[IL] Epoch 71/100, Loss: 0.0038, Val Loss: 0.0091
-[IL] Epoch 72/100, Loss: 0.0036, Val Loss: 0.0086
-[IL] Epoch 73/100, Loss: 0.0037, Val Loss: 0.0094
-[IL] Epoch 74/100, Loss: 0.0037, Val Loss: 0.0077
-[IL] Epoch 75/100, Loss: 0.0039, Val Loss: 0.0083
-[IL] Epoch 76/100, Loss: 0.0033, Val Loss: 0.0085
-[IL] Epoch 77/100, Loss: 0.0034, Val Loss: 0.0096
-[IL] Epoch 78/100, Loss: 0.0038, Val Loss: 0.0068
-[IL] Epoch 79/100, Loss: 0.0037, Val Loss: 0.0131
-[IL] Epoch 80/100, Loss: 0.0036, Val Loss: 0.0149
-[IL] Epoch 81/100, Loss: 0.0040, Val Loss: 0.0066
-[IL] Epoch 82/100, Loss: 0.0037, Val Loss: 0.0067
-[IL] Epoch 83/100, Loss: 0.0037, Val Loss: 0.0106
-[IL] Epoch 84/100, Loss: 0.0035, Val Loss: 0.0114
-[IL] Epoch 85/100, Loss: 0.0034, Val Loss: 0.0148
-[IL] Epoch 86/100, Loss: 0.0036, Val Loss: 0.0086
-[IL] Epoch 87/100, Loss: 0.0037, Val Loss: 0.0092
-[IL] Epoch 88/100, Loss: 0.0040, Val Loss: 0.0105
-[IL] Epoch 89/100, Loss: 0.0035, Val Loss: 0.0073
-[IL] Epoch 90/100, Loss: 0.0034, Val Loss: 0.0077
-[IL] Epoch 91/100, Loss: 0.0036, Val Loss: 0.0140
-[IL] Epoch 92/100, Loss: 0.0038, Val Loss: 0.0070
-[IL] Epoch 93/100, Loss: 0.0038, Val Loss: 0.0098
-[IL] Epoch 94/100, Loss: 0.0036, Val Loss: 0.0108
-[IL] Epoch 95/100, Loss: 0.0036, Val Loss: 0.0124
-[IL] Epoch 96/100, Loss: 0.0039, Val Loss: 0.0090
-[IL] Epoch 97/100, Loss: 0.0039, Val Loss: 0.0096
-[IL] Epoch 98/100, Loss: 0.0035, Val Loss: 0.0121
-[IL] Epoch 99/100, Loss: 0.0031, Val Loss: 0.0113
-test_mean_score: 0.76
-[IL] Eval - Success Rate: 0.760
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_04.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_4.ckpt
-
-================================================================================
-               OFFLINE RL ITERATION 6/10
-================================================================================
-
-
-[RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 5)
-
-[TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 36670 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-90.51939 | val=0.00055 | no-improve=0/5
-[TransitionModel] Epoch   15 | train=-100.80250 | val=0.00049 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[3, 1, 2, 6, 0], val_loss=0.00044
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_05.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_05.png
-
-[RL100Trainer] Phase 2a: Training IQL Critics (Iteration 5)
-[IQL] Epoch 0/20, V Loss: 0.0002, Q Loss: 0.0050
-[IQL] Epoch 1/20, V Loss: 0.0002, Q Loss: 0.0051
-[IQL] Epoch 2/20, V Loss: 0.0002, Q Loss: 0.0051
-[IQL] Epoch 3/20, V Loss: 0.0001, Q Loss: 0.0049
-[IQL] Epoch 4/20, V Loss: 0.0001, Q Loss: 0.0051
-[IQL] Epoch 5/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 6/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 7/20, V Loss: 0.0002, Q Loss: 0.0050
-[IQL] Epoch 8/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 9/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 10/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 11/20, V Loss: 0.0002, Q Loss: 0.0051
-[IQL] Epoch 12/20, V Loss: 0.0001, Q Loss: 0.0052
-[IQL] Epoch 13/20, V Loss: 0.0002, Q Loss: 0.0050
-[IQL] Epoch 14/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 15/20, V Loss: 0.0001, Q Loss: 0.0051
-[IQL] Epoch 16/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 17/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 18/20, V Loss: 0.0002, Q Loss: 0.0053
-[IQL] Epoch 19/20, V Loss: 0.0002, Q Loss: 0.0049
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_05.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_05.png
-
-[RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 5)
-[OPE] Behavior policy value J_old = 0.4281
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
-[Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 144 mini-batches, 36670 samples, raw advantage mean=0.0052, std=0.0196
-[Offline RL] Epoch 0/3, PPO Loss: -0.0276, PostKL: 5.306e-02, PostClipFrac: 0.266893, PostMeanRatio: 0.995936, PostRatioDev: 1.798e-01, GradNorm: 17.4797, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0081, PostKL: 7.712e-02, PostClipFrac: 0.265932, PostMeanRatio: 1.008784, PostRatioDev: 1.916e-01, GradNorm: 15.3196, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0075, PostKL: 8.319e-02, PostClipFrac: 0.254165, PostMeanRatio: 1.019640, PostRatioDev: 1.909e-01, GradNorm: 13.8551, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_05.png
-[OPE] Policy REJECTED: J_new=0.4281 ≤ J_old=0.4281 + δ=0.0043. Rolling back to behavior policy.
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 5)
-[Collect] 20 episodes, success=0.650, env_return=1204.28, rl_reward=0.65, steps=4000
-[Data Collection] Success Rate: 0.650, EnvReturn: 1204.28, RLReward: 0.65, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 13/20 successful episodes (drops 7 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 44000 steps, 220 episodes
-
-[RL100Trainer] Retraining IL on merged dataset...
-
-============================================================
-[RL100Trainer] Phase 1: Imitation Learning
-============================================================
-
-[BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0046, Val Loss: 0.0116
-[IL] Epoch 1/100, Loss: 0.0041, Val Loss: 0.0087
-[IL] Epoch 2/100, Loss: 0.0044, Val Loss: 0.0059
-[IL] Epoch 3/100, Loss: 0.0043, Val Loss: 0.0083
-[IL] Epoch 4/100, Loss: 0.0042, Val Loss: 0.0088
-[IL] Epoch 5/100, Loss: 0.0042, Val Loss: 0.0073
-[IL] Epoch 6/100, Loss: 0.0040, Val Loss: 0.0096
-[IL] Epoch 7/100, Loss: 0.0040, Val Loss: 0.0091
-[IL] Epoch 8/100, Loss: 0.0038, Val Loss: 0.0097
-[IL] Epoch 9/100, Loss: 0.0038, Val Loss: 0.0082
-[IL] Epoch 10/100, Loss: 0.0037, Val Loss: 0.0121
-[IL] Epoch 11/100, Loss: 0.0035, Val Loss: 0.0101
-[IL] Epoch 12/100, Loss: 0.0039, Val Loss: 0.0088
-[IL] Epoch 13/100, Loss: 0.0038, Val Loss: 0.0076
-[IL] Epoch 14/100, Loss: 0.0038, Val Loss: 0.0111
-[IL] Epoch 15/100, Loss: 0.0040, Val Loss: 0.0060
-[IL] Epoch 16/100, Loss: 0.0035, Val Loss: 0.0096
-[IL] Epoch 17/100, Loss: 0.0037, Val Loss: 0.0076
-[IL] Epoch 18/100, Loss: 0.0033, Val Loss: 0.0144
-[IL] Epoch 19/100, Loss: 0.0037, Val Loss: 0.0113
-[IL] Epoch 20/100, Loss: 0.0036, Val Loss: 0.0118
-[IL] Epoch 21/100, Loss: 0.0037, Val Loss: 0.0092
-[IL] Epoch 22/100, Loss: 0.0038, Val Loss: 0.0081
-[IL] Epoch 23/100, Loss: 0.0037, Val Loss: 0.0085
-[IL] Epoch 24/100, Loss: 0.0033, Val Loss: 0.0120
-[IL] Epoch 25/100, Loss: 0.0039, Val Loss: 0.0090
-[IL] Epoch 26/100, Loss: 0.0035, Val Loss: 0.0126
-[IL] Epoch 27/100, Loss: 0.0038, Val Loss: 0.0085
-[IL] Epoch 28/100, Loss: 0.0038, Val Loss: 0.0065
-[IL] Epoch 29/100, Loss: 0.0037, Val Loss: 0.0106
-[IL] Epoch 30/100, Loss: 0.0036, Val Loss: 0.0080
-[IL] Epoch 31/100, Loss: 0.0035, Val Loss: 0.0078
-[IL] Epoch 32/100, Loss: 0.0038, Val Loss: 0.0095
-[IL] Epoch 33/100, Loss: 0.0036, Val Loss: 0.0094
-[IL] Epoch 34/100, Loss: 0.0038, Val Loss: 0.0072
-[IL] Epoch 35/100, Loss: 0.0035, Val Loss: 0.0083
-[IL] Epoch 36/100, Loss: 0.0039, Val Loss: 0.0061
-[IL] Epoch 37/100, Loss: 0.0036, Val Loss: 0.0070
-[IL] Epoch 38/100, Loss: 0.0035, Val Loss: 0.0072
-[IL] Epoch 39/100, Loss: 0.0038, Val Loss: 0.0096
-[IL] Epoch 40/100, Loss: 0.0034, Val Loss: 0.0075
-[IL] Epoch 41/100, Loss: 0.0033, Val Loss: 0.0083
-[IL] Epoch 42/100, Loss: 0.0034, Val Loss: 0.0109
-[IL] Epoch 43/100, Loss: 0.0034, Val Loss: 0.0135
-[IL] Epoch 44/100, Loss: 0.0035, Val Loss: 0.0080
-[IL] Epoch 45/100, Loss: 0.0034, Val Loss: 0.0068
-[IL] Epoch 46/100, Loss: 0.0037, Val Loss: 0.0095
-[IL] Epoch 47/100, Loss: 0.0038, Val Loss: 0.0108
-[IL] Epoch 48/100, Loss: 0.0037, Val Loss: 0.0091
-[IL] Epoch 49/100, Loss: 0.0035, Val Loss: 0.0144
-[IL] Epoch 50/100, Loss: 0.0050, Val Loss: 0.0134
-[IL] Epoch 51/100, Loss: 0.0036, Val Loss: 0.0106
-[IL] Epoch 52/100, Loss: 0.0033, Val Loss: 0.0090
-[IL] Epoch 53/100, Loss: 0.0036, Val Loss: 0.0107
-[IL] Epoch 54/100, Loss: 0.0032, Val Loss: 0.0081
-[IL] Epoch 55/100, Loss: 0.0040, Val Loss: 0.0111
-[IL] Epoch 56/100, Loss: 0.0040, Val Loss: 0.0094
-[IL] Epoch 57/100, Loss: 0.0032, Val Loss: 0.0101
-[IL] Epoch 58/100, Loss: 0.0032, Val Loss: 0.0125
-[IL] Epoch 59/100, Loss: 0.0029, Val Loss: 0.0097
-[IL] Epoch 60/100, Loss: 0.0036, Val Loss: 0.0085
-[IL] Epoch 61/100, Loss: 0.0037, Val Loss: 0.0114
-[IL] Epoch 62/100, Loss: 0.0035, Val Loss: 0.0110
-[IL] Epoch 63/100, Loss: 0.0040, Val Loss: 0.0084
-[IL] Epoch 64/100, Loss: 0.0032, Val Loss: 0.0119
-[IL] Epoch 65/100, Loss: 0.0036, Val Loss: 0.0081
-[IL] Epoch 66/100, Loss: 0.0033, Val Loss: 0.0077
-[IL] Epoch 67/100, Loss: 0.0035, Val Loss: 0.0091
-[IL] Epoch 68/100, Loss: 0.0033, Val Loss: 0.0127
-[IL] Epoch 69/100, Loss: 0.0032, Val Loss: 0.0157
-[IL] Epoch 70/100, Loss: 0.0034, Val Loss: 0.0068
-[IL] Epoch 71/100, Loss: 0.0036, Val Loss: 0.0131
-[IL] Epoch 72/100, Loss: 0.0037, Val Loss: 0.0083
-[IL] Epoch 73/100, Loss: 0.0036, Val Loss: 0.0123
-[IL] Epoch 74/100, Loss: 0.0035, Val Loss: 0.0072
-[IL] Epoch 75/100, Loss: 0.0032, Val Loss: 0.0103
-[IL] Epoch 76/100, Loss: 0.0036, Val Loss: 0.0094
-[IL] Epoch 77/100, Loss: 0.0033, Val Loss: 0.0086
-[IL] Epoch 78/100, Loss: 0.0035, Val Loss: 0.0100
-[IL] Epoch 79/100, Loss: 0.0032, Val Loss: 0.0106
-[IL] Epoch 80/100, Loss: 0.0030, Val Loss: 0.0075
-[IL] Epoch 81/100, Loss: 0.0033, Val Loss: 0.0071
-[IL] Epoch 82/100, Loss: 0.0036, Val Loss: 0.0099
-[IL] Epoch 83/100, Loss: 0.0037, Val Loss: 0.0080
-[IL] Epoch 84/100, Loss: 0.0032, Val Loss: 0.0078
-[IL] Epoch 85/100, Loss: 0.0031, Val Loss: 0.0085
-[IL] Epoch 86/100, Loss: 0.0032, Val Loss: 0.0091
-[IL] Epoch 87/100, Loss: 0.0031, Val Loss: 0.0098
-[IL] Epoch 88/100, Loss: 0.0034, Val Loss: 0.0070
-[IL] Epoch 89/100, Loss: 0.0035, Val Loss: 0.0078
-[IL] Epoch 90/100, Loss: 0.0034, Val Loss: 0.0137
-[IL] Epoch 91/100, Loss: 0.0033, Val Loss: 0.0105
-[IL] Epoch 92/100, Loss: 0.0034, Val Loss: 0.0091
-[IL] Epoch 93/100, Loss: 0.0037, Val Loss: 0.0095
-[IL] Epoch 94/100, Loss: 0.0033, Val Loss: 0.0078
-[IL] Epoch 95/100, Loss: 0.0034, Val Loss: 0.0117
-[IL] Epoch 96/100, Loss: 0.0032, Val Loss: 0.0095
-[IL] Epoch 97/100, Loss: 0.0032, Val Loss: 0.0143
-[IL] Epoch 98/100, Loss: 0.0033, Val Loss: 0.0082
-[IL] Epoch 99/100, Loss: 0.0033, Val Loss: 0.0114
-test_mean_score: 0.85
-[IL] Eval - Success Rate: 0.850
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_05.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_5.ckpt
-
-================================================================================
-               OFFLINE RL ITERATION 7/10
-================================================================================
-
-
-[RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 6)
-
-[TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 40530 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-97.64641 | val=0.00034 | no-improve=0/5
-[TransitionModel] Epoch   20 | train=-108.76204 | val=0.00031 | no-improve=1/5
-[TransitionModel] Epoch   40 | train=-117.34272 | val=0.00028 | no-improve=0/5
-[TransitionModel] Epoch   45 | train=-119.49972 | val=0.00029 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[1, 3, 6, 4, 2], val_loss=0.00027
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_06.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_06.png
-
-[RL100Trainer] Phase 2a: Training IQL Critics (Iteration 6)
-[IQL] Epoch 0/20, V Loss: 0.0001, Q Loss: 0.0049
-[IQL] Epoch 1/20, V Loss: 0.0001, Q Loss: 0.0049
-[IQL] Epoch 2/20, V Loss: 0.0001, Q Loss: 0.0049
-[IQL] Epoch 3/20, V Loss: 0.0001, Q Loss: 0.0049
-[IQL] Epoch 4/20, V Loss: 0.0002, Q Loss: 0.0049
-[IQL] Epoch 5/20, V Loss: 0.0002, Q Loss: 0.0049
-[IQL] Epoch 6/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 7/20, V Loss: 0.0002, Q Loss: 0.0049
-[IQL] Epoch 8/20, V Loss: 0.0001, Q Loss: 0.0050
-[IQL] Epoch 9/20, V Loss: 0.0002, Q Loss: 0.0049
-[IQL] Epoch 10/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 11/20, V Loss: 0.0002, Q Loss: 0.0049
-[IQL] Epoch 12/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 13/20, V Loss: 0.0001, Q Loss: 0.0049
-[IQL] Epoch 14/20, V Loss: 0.0002, Q Loss: 0.0048
-[IQL] Epoch 15/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 16/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 17/20, V Loss: 0.0002, Q Loss: 0.0049
-[IQL] Epoch 18/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 19/20, V Loss: 0.0001, Q Loss: 0.0049
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_06.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_06.png
-
-[RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 6)
-[OPE] Behavior policy value J_old = 0.4178
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
-[Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 159 mini-batches, 40530 samples, raw advantage mean=-0.0117, std=0.0116
-[Offline RL] Epoch 0/3, PPO Loss: -0.0217, PostKL: 6.745e-02, PostClipFrac: 0.275203, PostMeanRatio: 0.996094, PostRatioDev: 1.833e-01, GradNorm: 16.1773, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0045, PostKL: 9.758e-02, PostClipFrac: 0.270956, PostMeanRatio: 1.008288, PostRatioDev: 1.953e-01, GradNorm: 13.2812, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0067, PostKL: 9.417e-02, PostClipFrac: 0.266379, PostMeanRatio: 1.016911, PostRatioDev: 1.999e-01, GradNorm: 12.2965, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_06.png
-[OPE] Policy REJECTED: J_new=0.4178 ≤ J_old=0.4178 + δ=0.0042. Rolling back to behavior policy.
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 6)
-[Collect] 20 episodes, success=0.750, env_return=984.91, rl_reward=0.75, steps=4000
-[Data Collection] Success Rate: 0.750, EnvReturn: 984.91, RLReward: 0.75, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 15/20 successful episodes (drops 5 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 48000 steps, 240 episodes
-
-[RL100Trainer] Retraining IL on merged dataset...
-
-============================================================
-[RL100Trainer] Phase 1: Imitation Learning
-============================================================
-
-[BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0048, Val Loss: 0.0070
-[IL] Epoch 1/100, Loss: 0.0038, Val Loss: 0.0092
-[IL] Epoch 2/100, Loss: 0.0041, Val Loss: 0.0088
-[IL] Epoch 3/100, Loss: 0.0039, Val Loss: 0.0072
-[IL] Epoch 4/100, Loss: 0.0038, Val Loss: 0.0081
-[IL] Epoch 5/100, Loss: 0.0039, Val Loss: 0.0101
-[IL] Epoch 6/100, Loss: 0.0039, Val Loss: 0.0085
-[IL] Epoch 7/100, Loss: 0.0038, Val Loss: 0.0108
-[IL] Epoch 8/100, Loss: 0.0036, Val Loss: 0.0083
-[IL] Epoch 9/100, Loss: 0.0039, Val Loss: 0.0069
-[IL] Epoch 10/100, Loss: 0.0036, Val Loss: 0.0078
-[IL] Epoch 11/100, Loss: 0.0039, Val Loss: 0.0076
-[IL] Epoch 12/100, Loss: 0.0039, Val Loss: 0.0064
-[IL] Epoch 13/100, Loss: 0.0038, Val Loss: 0.0096
-[IL] Epoch 14/100, Loss: 0.0036, Val Loss: 0.0129
-[IL] Epoch 15/100, Loss: 0.0037, Val Loss: 0.0093
-[IL] Epoch 16/100, Loss: 0.0036, Val Loss: 0.0081
-[IL] Epoch 17/100, Loss: 0.0036, Val Loss: 0.0092
-[IL] Epoch 18/100, Loss: 0.0033, Val Loss: 0.0066
-[IL] Epoch 19/100, Loss: 0.0035, Val Loss: 0.0076
-[IL] Epoch 20/100, Loss: 0.0034, Val Loss: 0.0099
-[IL] Epoch 21/100, Loss: 0.0035, Val Loss: 0.0080
-[IL] Epoch 22/100, Loss: 0.0036, Val Loss: 0.0074
-[IL] Epoch 23/100, Loss: 0.0033, Val Loss: 0.0136
-[IL] Epoch 24/100, Loss: 0.0037, Val Loss: 0.0088
-[IL] Epoch 25/100, Loss: 0.0035, Val Loss: 0.0112
-[IL] Epoch 26/100, Loss: 0.0033, Val Loss: 0.0066
-[IL] Epoch 27/100, Loss: 0.0034, Val Loss: 0.0080
-[IL] Epoch 28/100, Loss: 0.0033, Val Loss: 0.0057
-[IL] Epoch 29/100, Loss: 0.0034, Val Loss: 0.0082
-[IL] Epoch 30/100, Loss: 0.0036, Val Loss: 0.0093
-[IL] Epoch 31/100, Loss: 0.0037, Val Loss: 0.0072
-[IL] Epoch 32/100, Loss: 0.0037, Val Loss: 0.0094
-[IL] Epoch 33/100, Loss: 0.0036, Val Loss: 0.0078
-[IL] Epoch 34/100, Loss: 0.0034, Val Loss: 0.0086
-[IL] Epoch 35/100, Loss: 0.0031, Val Loss: 0.0089
-[IL] Epoch 36/100, Loss: 0.0030, Val Loss: 0.0130
-[IL] Epoch 37/100, Loss: 0.0036, Val Loss: 0.0114
-[IL] Epoch 38/100, Loss: 0.0034, Val Loss: 0.0088
-[IL] Epoch 39/100, Loss: 0.0036, Val Loss: 0.0085
-[IL] Epoch 40/100, Loss: 0.0035, Val Loss: 0.0108
-[IL] Epoch 41/100, Loss: 0.0036, Val Loss: 0.0073
-[IL] Epoch 42/100, Loss: 0.0034, Val Loss: 0.0091
-[IL] Epoch 43/100, Loss: 0.0036, Val Loss: 0.0076
-[IL] Epoch 44/100, Loss: 0.0035, Val Loss: 0.0123
-[IL] Epoch 45/100, Loss: 0.0033, Val Loss: 0.0091
-[IL] Epoch 46/100, Loss: 0.0033, Val Loss: 0.0113
-[IL] Epoch 47/100, Loss: 0.0031, Val Loss: 0.0122
-[IL] Epoch 48/100, Loss: 0.0034, Val Loss: 0.0083
-[IL] Epoch 49/100, Loss: 0.0034, Val Loss: 0.0097
-[IL] Epoch 50/100, Loss: 0.0034, Val Loss: 0.0085
-[IL] Epoch 51/100, Loss: 0.0034, Val Loss: 0.0118
-[IL] Epoch 52/100, Loss: 0.0032, Val Loss: 0.0089
-[IL] Epoch 53/100, Loss: 0.0032, Val Loss: 0.0123
-[IL] Epoch 54/100, Loss: 0.0030, Val Loss: 0.0109
-[IL] Epoch 55/100, Loss: 0.0032, Val Loss: 0.0106
-[IL] Epoch 56/100, Loss: 0.0033, Val Loss: 0.0051
-[IL] Epoch 57/100, Loss: 0.0031, Val Loss: 0.0114
-[IL] Epoch 58/100, Loss: 0.0033, Val Loss: 0.0076
-[IL] Epoch 59/100, Loss: 0.0033, Val Loss: 0.0095
-[IL] Epoch 60/100, Loss: 0.0031, Val Loss: 0.0113
-[IL] Epoch 61/100, Loss: 0.0030, Val Loss: 0.0056
-[IL] Epoch 62/100, Loss: 0.0032, Val Loss: 0.0121
-[IL] Epoch 63/100, Loss: 0.0034, Val Loss: 0.0093
-[IL] Epoch 64/100, Loss: 0.0032, Val Loss: 0.0099
-[IL] Epoch 65/100, Loss: 0.0033, Val Loss: 0.0103
-[IL] Epoch 66/100, Loss: 0.0032, Val Loss: 0.0094
-[IL] Epoch 67/100, Loss: 0.0032, Val Loss: 0.0084
-[IL] Epoch 68/100, Loss: 0.0032, Val Loss: 0.0064
-[IL] Epoch 69/100, Loss: 0.0037, Val Loss: 0.0110
-[IL] Epoch 70/100, Loss: 0.0030, Val Loss: 0.0068
-[IL] Epoch 71/100, Loss: 0.0032, Val Loss: 0.0102
-[IL] Epoch 72/100, Loss: 0.0033, Val Loss: 0.0077
-[IL] Epoch 73/100, Loss: 0.0032, Val Loss: 0.0065
-[IL] Epoch 74/100, Loss: 0.0035, Val Loss: 0.0101
-[IL] Epoch 75/100, Loss: 0.0035, Val Loss: 0.0079
-[IL] Epoch 76/100, Loss: 0.0029, Val Loss: 0.0093
-[IL] Epoch 77/100, Loss: 0.0034, Val Loss: 0.0078
-[IL] Epoch 78/100, Loss: 0.0034, Val Loss: 0.0087
-[IL] Epoch 79/100, Loss: 0.0033, Val Loss: 0.0094
-[IL] Epoch 80/100, Loss: 0.0030, Val Loss: 0.0089
-[IL] Epoch 81/100, Loss: 0.0031, Val Loss: 0.0089
-[IL] Epoch 82/100, Loss: 0.0030, Val Loss: 0.0082
-[IL] Epoch 83/100, Loss: 0.0030, Val Loss: 0.0074
-[IL] Epoch 84/100, Loss: 0.0030, Val Loss: 0.0099
-[IL] Epoch 85/100, Loss: 0.0032, Val Loss: 0.0078
-[IL] Epoch 86/100, Loss: 0.0030, Val Loss: 0.0049
-[IL] Epoch 87/100, Loss: 0.0034, Val Loss: 0.0065
-[IL] Epoch 88/100, Loss: 0.0030, Val Loss: 0.0059
-[IL] Epoch 89/100, Loss: 0.0031, Val Loss: 0.0134
-[IL] Epoch 90/100, Loss: 0.0033, Val Loss: 0.0115
-[IL] Epoch 91/100, Loss: 0.0032, Val Loss: 0.0077
-[IL] Epoch 92/100, Loss: 0.0030, Val Loss: 0.0093
-[IL] Epoch 93/100, Loss: 0.0031, Val Loss: 0.0091
-[IL] Epoch 94/100, Loss: 0.0031, Val Loss: 0.0168
-[IL] Epoch 95/100, Loss: 0.0029, Val Loss: 0.0116
-[IL] Epoch 96/100, Loss: 0.0029, Val Loss: 0.0096
-[IL] Epoch 97/100, Loss: 0.0031, Val Loss: 0.0089
-[IL] Epoch 98/100, Loss: 0.0034, Val Loss: 0.0100
-[IL] Epoch 99/100, Loss: 0.0035, Val Loss: 0.0076
-test_mean_score: 0.84
-[IL] Eval - Success Rate: 0.840
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_06.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_6.ckpt
-
-================================================================================
-               OFFLINE RL ITERATION 8/10
-================================================================================
-
-
-[RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 7)
-
-[TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 44390 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-114.75710 | val=0.00037 | no-improve=0/5
-[TransitionModel] Epoch   20 | train=-128.36311 | val=0.00036 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[4, 0, 5, 3, 1], val_loss=0.00032
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_07.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_07.png
-
-[RL100Trainer] Phase 2a: Training IQL Critics (Iteration 7)
-[IQL] Epoch 0/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 1/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 2/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 3/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 4/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 5/20, V Loss: 0.0002, Q Loss: 0.0048
-[IQL] Epoch 6/20, V Loss: 0.0001, Q Loss: 0.0049
-[IQL] Epoch 7/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 8/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 9/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 10/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 11/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 12/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 13/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 14/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 15/20, V Loss: 0.0002, Q Loss: 0.0048
-[IQL] Epoch 16/20, V Loss: 0.0002, Q Loss: 0.0048
-[IQL] Epoch 17/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 18/20, V Loss: 0.0002, Q Loss: 0.0048
-[IQL] Epoch 19/20, V Loss: 0.0001, Q Loss: 0.0049
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_07.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_07.png
-
-[RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 7)
-[OPE] Behavior policy value J_old = 0.4156
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
-[Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 174 mini-batches, 44390 samples, raw advantage mean=-0.0140, std=0.0104
-[Offline RL] Epoch 0/3, PPO Loss: -0.0214, PostKL: 8.236e-02, PostClipFrac: 0.237084, PostMeanRatio: 1.037753, PostRatioDev: 2.029e-01, GradNorm: 14.9234, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0032, PostKL: 1.495e+00, PostClipFrac: 0.241285, PostMeanRatio: 2.434896, PostRatioDev: 1.606e+00, GradNorm: 13.4826, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0093, PostKL: 4.075e-01, PostClipFrac: 0.242386, PostMeanRatio: 1.349116, PostRatioDev: 5.197e-01, GradNorm: 12.7026, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_07.png
-[OPE] Policy REJECTED: J_new=0.4157 ≤ J_old=0.4156 + δ=0.0042. Rolling back to behavior policy.
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 7)
-[Collect] 20 episodes, success=0.850, env_return=1013.80, rl_reward=0.85, steps=4000
-[Data Collection] Success Rate: 0.850, EnvReturn: 1013.80, RLReward: 0.85, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 17/20 successful episodes (drops 3 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 52000 steps, 260 episodes
-
-[RL100Trainer] Retraining IL on merged dataset...
-
-============================================================
-[RL100Trainer] Phase 1: Imitation Learning
-============================================================
-
-[BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0041, Val Loss: 0.0117
-[IL] Epoch 1/100, Loss: 0.0040, Val Loss: 0.0058
-[IL] Epoch 2/100, Loss: 0.0037, Val Loss: 0.0081
-[IL] Epoch 3/100, Loss: 0.0040, Val Loss: 0.0097
-[IL] Epoch 4/100, Loss: 0.0038, Val Loss: 0.0111
-[IL] Epoch 5/100, Loss: 0.0035, Val Loss: 0.0093
-[IL] Epoch 6/100, Loss: 0.0033, Val Loss: 0.0101
-[IL] Epoch 7/100, Loss: 0.0037, Val Loss: 0.0084
-[IL] Epoch 8/100, Loss: 0.0036, Val Loss: 0.0076
-[IL] Epoch 9/100, Loss: 0.0036, Val Loss: 0.0109
-[IL] Epoch 10/100, Loss: 0.0035, Val Loss: 0.0110
-[IL] Epoch 11/100, Loss: 0.0036, Val Loss: 0.0082
-[IL] Epoch 12/100, Loss: 0.0033, Val Loss: 0.0092
-[IL] Epoch 13/100, Loss: 0.0033, Val Loss: 0.0090
-[IL] Epoch 14/100, Loss: 0.0036, Val Loss: 0.0122
-[IL] Epoch 15/100, Loss: 0.0039, Val Loss: 0.0121
-[IL] Epoch 16/100, Loss: 0.0036, Val Loss: 0.0085
-[IL] Epoch 17/100, Loss: 0.0035, Val Loss: 0.0132
-[IL] Epoch 18/100, Loss: 0.0032, Val Loss: 0.0061
-[IL] Epoch 19/100, Loss: 0.0031, Val Loss: 0.0073
-[IL] Epoch 20/100, Loss: 0.0032, Val Loss: 0.0098
-[IL] Epoch 21/100, Loss: 0.0031, Val Loss: 0.0107
-[IL] Epoch 22/100, Loss: 0.0032, Val Loss: 0.0084
-[IL] Epoch 23/100, Loss: 0.0035, Val Loss: 0.0077
-[IL] Epoch 24/100, Loss: 0.0036, Val Loss: 0.0064
-[IL] Epoch 25/100, Loss: 0.0033, Val Loss: 0.0079
-[IL] Epoch 26/100, Loss: 0.0033, Val Loss: 0.0057
-[IL] Epoch 27/100, Loss: 0.0034, Val Loss: 0.0082
-[IL] Epoch 28/100, Loss: 0.0039, Val Loss: 0.0067
-[IL] Epoch 29/100, Loss: 0.0032, Val Loss: 0.0081
-[IL] Epoch 30/100, Loss: 0.0032, Val Loss: 0.0069
-[IL] Epoch 31/100, Loss: 0.0034, Val Loss: 0.0079
-[IL] Epoch 32/100, Loss: 0.0033, Val Loss: 0.0094
-[IL] Epoch 33/100, Loss: 0.0030, Val Loss: 0.0086
-[IL] Epoch 34/100, Loss: 0.0030, Val Loss: 0.0104
-[IL] Epoch 35/100, Loss: 0.0031, Val Loss: 0.0073
-[IL] Epoch 36/100, Loss: 0.0032, Val Loss: 0.0075
-[IL] Epoch 37/100, Loss: 0.0031, Val Loss: 0.0115
-[IL] Epoch 38/100, Loss: 0.0032, Val Loss: 0.0068
-[IL] Epoch 39/100, Loss: 0.0033, Val Loss: 0.0104
-[IL] Epoch 40/100, Loss: 0.0030, Val Loss: 0.0130
-[IL] Epoch 41/100, Loss: 0.0030, Val Loss: 0.0099
-[IL] Epoch 42/100, Loss: 0.0033, Val Loss: 0.0103
-[IL] Epoch 43/100, Loss: 0.0033, Val Loss: 0.0099
-[IL] Epoch 44/100, Loss: 0.0035, Val Loss: 0.0097
-[IL] Epoch 45/100, Loss: 0.0029, Val Loss: 0.0080
-[IL] Epoch 46/100, Loss: 0.0031, Val Loss: 0.0078
-[IL] Epoch 47/100, Loss: 0.0031, Val Loss: 0.0092
-[IL] Epoch 48/100, Loss: 0.0032, Val Loss: 0.0070
-[IL] Epoch 49/100, Loss: 0.0031, Val Loss: 0.0084
-[IL] Epoch 50/100, Loss: 0.0030, Val Loss: 0.0149
-[IL] Epoch 51/100, Loss: 0.0032, Val Loss: 0.0069
-[IL] Epoch 52/100, Loss: 0.0030, Val Loss: 0.0092
-[IL] Epoch 53/100, Loss: 0.0034, Val Loss: 0.0100
-[IL] Epoch 54/100, Loss: 0.0035, Val Loss: 0.0111
-[IL] Epoch 55/100, Loss: 0.0030, Val Loss: 0.0055
-[IL] Epoch 56/100, Loss: 0.0032, Val Loss: 0.0067
-[IL] Epoch 57/100, Loss: 0.0028, Val Loss: 0.0096
-[IL] Epoch 58/100, Loss: 0.0029, Val Loss: 0.0079
-[IL] Epoch 59/100, Loss: 0.0034, Val Loss: 0.0106
-[IL] Epoch 60/100, Loss: 0.0032, Val Loss: 0.0107
-[IL] Epoch 61/100, Loss: 0.0031, Val Loss: 0.0078
-[IL] Epoch 62/100, Loss: 0.0030, Val Loss: 0.0081
-[IL] Epoch 63/100, Loss: 0.0029, Val Loss: 0.0103
-[IL] Epoch 64/100, Loss: 0.0031, Val Loss: 0.0076
-[IL] Epoch 65/100, Loss: 0.0030, Val Loss: 0.0131
-[IL] Epoch 66/100, Loss: 0.0030, Val Loss: 0.0106
-[IL] Epoch 67/100, Loss: 0.0029, Val Loss: 0.0097
-[IL] Epoch 68/100, Loss: 0.0032, Val Loss: 0.0088
-[IL] Epoch 69/100, Loss: 0.0028, Val Loss: 0.0092
-[IL] Epoch 70/100, Loss: 0.0034, Val Loss: 0.0082
-[IL] Epoch 71/100, Loss: 0.0027, Val Loss: 0.0094
-[IL] Epoch 72/100, Loss: 0.0028, Val Loss: 0.0106
-[IL] Epoch 73/100, Loss: 0.0030, Val Loss: 0.0103
-[IL] Epoch 74/100, Loss: 0.0028, Val Loss: 0.0114
-[IL] Epoch 75/100, Loss: 0.0030, Val Loss: 0.0091
-[IL] Epoch 76/100, Loss: 0.0032, Val Loss: 0.0089
-[IL] Epoch 77/100, Loss: 0.0031, Val Loss: 0.0080
-[IL] Epoch 78/100, Loss: 0.0031, Val Loss: 0.0093
-[IL] Epoch 79/100, Loss: 0.0030, Val Loss: 0.0083
-[IL] Epoch 80/100, Loss: 0.0028, Val Loss: 0.0096
-[IL] Epoch 81/100, Loss: 0.0034, Val Loss: 0.0148
-[IL] Epoch 82/100, Loss: 0.0032, Val Loss: 0.0108
-[IL] Epoch 83/100, Loss: 0.0030, Val Loss: 0.0077
-[IL] Epoch 84/100, Loss: 0.0030, Val Loss: 0.0079
-[IL] Epoch 85/100, Loss: 0.0028, Val Loss: 0.0110
-[IL] Epoch 86/100, Loss: 0.0028, Val Loss: 0.0129
-[IL] Epoch 87/100, Loss: 0.0028, Val Loss: 0.0110
-[IL] Epoch 88/100, Loss: 0.0028, Val Loss: 0.0081
-[IL] Epoch 89/100, Loss: 0.0026, Val Loss: 0.0142
-[IL] Epoch 90/100, Loss: 0.0028, Val Loss: 0.0098
-[IL] Epoch 91/100, Loss: 0.0029, Val Loss: 0.0101
-[IL] Epoch 92/100, Loss: 0.0031, Val Loss: 0.0132
-[IL] Epoch 93/100, Loss: 0.0029, Val Loss: 0.0075
-[IL] Epoch 94/100, Loss: 0.0032, Val Loss: 0.0109
-[IL] Epoch 95/100, Loss: 0.0030, Val Loss: 0.0080
-[IL] Epoch 96/100, Loss: 0.0031, Val Loss: 0.0089
-[IL] Epoch 97/100, Loss: 0.0032, Val Loss: 0.0099
-[IL] Epoch 98/100, Loss: 0.0029, Val Loss: 0.0053
-[IL] Epoch 99/100, Loss: 0.0029, Val Loss: 0.0129
-test_mean_score: 0.83
-[IL] Eval - Success Rate: 0.830
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_07.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_7.ckpt
-
-================================================================================
-               OFFLINE RL ITERATION 9/10
-================================================================================
-
-
-[RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 8)
-
-[TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 48250 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-126.38094 | val=0.00040 | no-improve=0/5
-[TransitionModel] Epoch   20 | train=-138.15325 | val=0.00038 | no-improve=1/5
-[TransitionModel] Epoch   31 | train=-143.61961 | val=0.00040 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[2, 1, 6, 3, 5], val_loss=0.00034
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_08.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_08.png
-
-[RL100Trainer] Phase 2a: Training IQL Critics (Iteration 8)
-[IQL] Epoch 0/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 1/20, V Loss: 0.0002, Q Loss: 0.0048
-[IQL] Epoch 2/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 3/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 4/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 5/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 6/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 7/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 8/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 9/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 10/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 11/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 12/20, V Loss: 0.0002, Q Loss: 0.0047
-[IQL] Epoch 13/20, V Loss: 0.0002, Q Loss: 0.0048
-[IQL] Epoch 14/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 15/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 16/20, V Loss: 0.0002, Q Loss: 0.0047
-[IQL] Epoch 17/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 18/20, V Loss: 0.0002, Q Loss: 0.0047
-[IQL] Epoch 19/20, V Loss: 0.0002, Q Loss: 0.0047
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_08.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_08.png
-
-[RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 8)
-[OPE] Behavior policy value J_old = 0.4319
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
-[Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 189 mini-batches, 48250 samples, raw advantage mean=0.0005, std=0.0161
-[Offline RL] Epoch 0/3, PPO Loss: -0.0213, PostKL: 4.781e-02, PostClipFrac: 0.261167, PostMeanRatio: 0.997215, PostRatioDev: 1.773e-01, GradNorm: 14.7275, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0060, PostKL: 1.718e-01, PostClipFrac: 0.262598, PostMeanRatio: 1.104879, PostRatioDev: 2.877e-01, GradNorm: 13.9995, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0069, PostKL: 2.017e-01, PostClipFrac: 0.258207, PostMeanRatio: 1.136867, PostRatioDev: 3.130e-01, GradNorm: 11.5377, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_08.png
-[OPE] Policy REJECTED: J_new=0.4319 ≤ J_old=0.4319 + δ=0.0043. Rolling back to behavior policy.
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 8)
-[Collect] 20 episodes, success=0.700, env_return=1044.70, rl_reward=0.70, steps=4000
-[Data Collection] Success Rate: 0.700, EnvReturn: 1044.70, RLReward: 0.70, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 14/20 successful episodes (drops 6 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 56000 steps, 280 episodes
-
-[RL100Trainer] Retraining IL on merged dataset...
-
-============================================================
-[RL100Trainer] Phase 1: Imitation Learning
-============================================================
-
-[BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0041, Val Loss: 0.0045
-[IL] Epoch 1/100, Loss: 0.0037, Val Loss: 0.0092
-[IL] Epoch 2/100, Loss: 0.0038, Val Loss: 0.0089
-[IL] Epoch 3/100, Loss: 0.0036, Val Loss: 0.0081
-[IL] Epoch 4/100, Loss: 0.0033, Val Loss: 0.0070
-[IL] Epoch 5/100, Loss: 0.0032, Val Loss: 0.0103
-[IL] Epoch 6/100, Loss: 0.0036, Val Loss: 0.0083
-[IL] Epoch 7/100, Loss: 0.0034, Val Loss: 0.0113
-[IL] Epoch 8/100, Loss: 0.0032, Val Loss: 0.0087
-[IL] Epoch 9/100, Loss: 0.0031, Val Loss: 0.0103
-[IL] Epoch 10/100, Loss: 0.0030, Val Loss: 0.0096
-[IL] Epoch 11/100, Loss: 0.0035, Val Loss: 0.0130
-[IL] Epoch 12/100, Loss: 0.0034, Val Loss: 0.0099
-[IL] Epoch 13/100, Loss: 0.0032, Val Loss: 0.0118
-[IL] Epoch 14/100, Loss: 0.0043, Val Loss: 0.0104
-[IL] Epoch 15/100, Loss: 0.0034, Val Loss: 0.0094
-[IL] Epoch 16/100, Loss: 0.0030, Val Loss: 0.0117
-[IL] Epoch 17/100, Loss: 0.0031, Val Loss: 0.0105
-[IL] Epoch 18/100, Loss: 0.0038, Val Loss: 0.0090
-[IL] Epoch 19/100, Loss: 0.0030, Val Loss: 0.0085
-[IL] Epoch 20/100, Loss: 0.0030, Val Loss: 0.0129
-[IL] Epoch 21/100, Loss: 0.0030, Val Loss: 0.0084
-[IL] Epoch 22/100, Loss: 0.0030, Val Loss: 0.0115
-[IL] Epoch 23/100, Loss: 0.0031, Val Loss: 0.0068
-[IL] Epoch 24/100, Loss: 0.0029, Val Loss: 0.0100
-[IL] Epoch 25/100, Loss: 0.0031, Val Loss: 0.0097
-[IL] Epoch 26/100, Loss: 0.0029, Val Loss: 0.0069
-[IL] Epoch 27/100, Loss: 0.0032, Val Loss: 0.0101
-[IL] Epoch 28/100, Loss: 0.0032, Val Loss: 0.0094
-[IL] Epoch 29/100, Loss: 0.0030, Val Loss: 0.0058
-[IL] Epoch 30/100, Loss: 0.0030, Val Loss: 0.0092
-[IL] Epoch 31/100, Loss: 0.0031, Val Loss: 0.0110
-[IL] Epoch 32/100, Loss: 0.0030, Val Loss: 0.0094
-[IL] Epoch 33/100, Loss: 0.0032, Val Loss: 0.0086
-[IL] Epoch 34/100, Loss: 0.0029, Val Loss: 0.0093
-[IL] Epoch 35/100, Loss: 0.0028, Val Loss: 0.0109
-[IL] Epoch 36/100, Loss: 0.0029, Val Loss: 0.0102
-[IL] Epoch 37/100, Loss: 0.0032, Val Loss: 0.0068
-[IL] Epoch 38/100, Loss: 0.0034, Val Loss: 0.0086
-[IL] Epoch 39/100, Loss: 0.0028, Val Loss: 0.0112
-[IL] Epoch 40/100, Loss: 0.0034, Val Loss: 0.0137
-[IL] Epoch 41/100, Loss: 0.0029, Val Loss: 0.0114
-[IL] Epoch 42/100, Loss: 0.0030, Val Loss: 0.0107
-[IL] Epoch 43/100, Loss: 0.0038, Val Loss: 0.0095
-[IL] Epoch 44/100, Loss: 0.0031, Val Loss: 0.0117
-[IL] Epoch 45/100, Loss: 0.0029, Val Loss: 0.0084
-[IL] Epoch 46/100, Loss: 0.0030, Val Loss: 0.0114
-[IL] Epoch 47/100, Loss: 0.0031, Val Loss: 0.0132
-[IL] Epoch 48/100, Loss: 0.0029, Val Loss: 0.0082
-[IL] Epoch 49/100, Loss: 0.0028, Val Loss: 0.0124
-[IL] Epoch 50/100, Loss: 0.0030, Val Loss: 0.0061
-[IL] Epoch 51/100, Loss: 0.0029, Val Loss: 0.0172
-[IL] Epoch 52/100, Loss: 0.0028, Val Loss: 0.0127
-[IL] Epoch 53/100, Loss: 0.0029, Val Loss: 0.0132
-[IL] Epoch 54/100, Loss: 0.0027, Val Loss: 0.0127
-[IL] Epoch 55/100, Loss: 0.0032, Val Loss: 0.0094
-[IL] Epoch 56/100, Loss: 0.0029, Val Loss: 0.0080
-[IL] Epoch 57/100, Loss: 0.0028, Val Loss: 0.0105
-[IL] Epoch 58/100, Loss: 0.0030, Val Loss: 0.0085
-[IL] Epoch 59/100, Loss: 0.0029, Val Loss: 0.0125
-[IL] Epoch 60/100, Loss: 0.0029, Val Loss: 0.0114
-[IL] Epoch 61/100, Loss: 0.0030, Val Loss: 0.0117
-[IL] Epoch 62/100, Loss: 0.0027, Val Loss: 0.0127
-[IL] Epoch 63/100, Loss: 0.0029, Val Loss: 0.0125
-[IL] Epoch 64/100, Loss: 0.0026, Val Loss: 0.0103
-[IL] Epoch 65/100, Loss: 0.0029, Val Loss: 0.0099
-[IL] Epoch 66/100, Loss: 0.0029, Val Loss: 0.0109
-[IL] Epoch 67/100, Loss: 0.0030, Val Loss: 0.0143
-[IL] Epoch 68/100, Loss: 0.0027, Val Loss: 0.0085
-[IL] Epoch 69/100, Loss: 0.0028, Val Loss: 0.0083
-[IL] Epoch 70/100, Loss: 0.0029, Val Loss: 0.0235
-[IL] Epoch 71/100, Loss: 0.0029, Val Loss: 0.0101
-[IL] Epoch 72/100, Loss: 0.0030, Val Loss: 0.0113
-[IL] Epoch 73/100, Loss: 0.0031, Val Loss: 0.0136
-[IL] Epoch 74/100, Loss: 0.0030, Val Loss: 0.0099
-[IL] Epoch 75/100, Loss: 0.0028, Val Loss: 0.0073
-[IL] Epoch 76/100, Loss: 0.0029, Val Loss: 0.0081
-[IL] Epoch 77/100, Loss: 0.0027, Val Loss: 0.0142
-[IL] Epoch 78/100, Loss: 0.0026, Val Loss: 0.0146
-[IL] Epoch 79/100, Loss: 0.0030, Val Loss: 0.0131
-[IL] Epoch 80/100, Loss: 0.0032, Val Loss: 0.0143
-[IL] Epoch 81/100, Loss: 0.0028, Val Loss: 0.0088
-[IL] Epoch 82/100, Loss: 0.0030, Val Loss: 0.0122
-[IL] Epoch 83/100, Loss: 0.0031, Val Loss: 0.0060
-[IL] Epoch 84/100, Loss: 0.0027, Val Loss: 0.0121
-[IL] Epoch 85/100, Loss: 0.0029, Val Loss: 0.0102
-[IL] Epoch 86/100, Loss: 0.0027, Val Loss: 0.0108
-[IL] Epoch 87/100, Loss: 0.0029, Val Loss: 0.0075
-[IL] Epoch 88/100, Loss: 0.0031, Val Loss: 0.0091
-[IL] Epoch 89/100, Loss: 0.0029, Val Loss: 0.0154
-[IL] Epoch 90/100, Loss: 0.0030, Val Loss: 0.0099
-[IL] Epoch 91/100, Loss: 0.0027, Val Loss: 0.0084
-[IL] Epoch 92/100, Loss: 0.0027, Val Loss: 0.0109
-[IL] Epoch 93/100, Loss: 0.0028, Val Loss: 0.0099
-[IL] Epoch 94/100, Loss: 0.0027, Val Loss: 0.0114
-[IL] Epoch 95/100, Loss: 0.0027, Val Loss: 0.0132
-[IL] Epoch 96/100, Loss: 0.0027, Val Loss: 0.0126
-[IL] Epoch 97/100, Loss: 0.0028, Val Loss: 0.0152
-[IL] Epoch 98/100, Loss: 0.0032, Val Loss: 0.0108
-[IL] Epoch 99/100, Loss: 0.0030, Val Loss: 0.0095
-test_mean_score: 0.82
-[IL] Eval - Success Rate: 0.820
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_08.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_8.ckpt
-
-================================================================================
-               OFFLINE RL ITERATION 10/10
-================================================================================
-
-
-[RL100Trainer] Line 6 — Training Transition Model T_θ (Iteration 9)
-
-[TransitionModel] Encoding dataset for transition model training...
-[TransitionModel] Dataset: 52110 samples, input_dim=288, target_dim=257
-[TransitionModel] Epoch    0 | train=-139.31363 | val=0.00032 | no-improve=0/5
-[TransitionModel] Epoch   20 | train=-153.79916 | val=0.00026 | no-improve=0/5
-[TransitionModel] Epoch   27 | train=-157.52415 | val=0.00026 | no-improve=5/5
-[TransitionModel] Training complete. Elites=[2, 0, 6, 4, 3], val_loss=0.00025
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_train_loss_iter_09.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/transition_val_loss_iter_09.png
-
-[RL100Trainer] Phase 2a: Training IQL Critics (Iteration 9)
-[IQL] Epoch 0/20, V Loss: 0.0002, Q Loss: 0.0047
-[IQL] Epoch 1/20, V Loss: 0.0001, Q Loss: 0.0048
-[IQL] Epoch 2/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 3/20, V Loss: 0.0002, Q Loss: 0.0047
-[IQL] Epoch 4/20, V Loss: 0.0002, Q Loss: 0.0047
-[IQL] Epoch 5/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 6/20, V Loss: 0.0001, Q Loss: 0.0047
-[IQL] Epoch 7/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 8/20, V Loss: 0.0001, Q Loss: 0.0046
-[IQL] Epoch 9/20, V Loss: 0.0002, Q Loss: 0.0047
-[IQL] Epoch 10/20, V Loss: 0.0002, Q Loss: 0.0047
-[IQL] Epoch 11/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 12/20, V Loss: 0.0001, Q Loss: 0.0046
-[IQL] Epoch 13/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 14/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 15/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 16/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 17/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 18/20, V Loss: 0.0002, Q Loss: 0.0046
-[IQL] Epoch 19/20, V Loss: 0.0002, Q Loss: 0.0046
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_q_loss_iter_09.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/iql_v_loss_iter_09.png
-
-[RL100Trainer] Phase 2b: Offline RL Optimization (Iteration 9)
-[OPE] Behavior policy value J_old = 0.4181
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
-[Offline RL] Building fixed PPO buffer from D_m under frozen behavior policy π_i...
-[Offline RL] Fixed PPO buffer ready: 204 mini-batches, 52110 samples, raw advantage mean=-0.0002, std=0.0231
-[Offline RL] Epoch 0/3, PPO Loss: -0.0238, PostKL: 5.795e-02, PostClipFrac: 0.278312, PostMeanRatio: 0.997406, PostRatioDev: 1.867e-01, GradNorm: 17.0130, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 1/3, PPO Loss: -0.0058, PostKL: 8.566e-02, PostClipFrac: 0.268277, PostMeanRatio: 1.016866, PostRatioDev: 2.002e-01, GradNorm: 13.0787, Reg Loss: 0.0000, CD Loss: 0.0000
-[Offline RL] Epoch 2/3, PPO Loss: 0.0071, PostKL: 9.973e-02, PostClipFrac: 0.254785, PostMeanRatio: 1.039301, PostRatioDev: 2.114e-01, GradNorm: 11.8013, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/ppo_loss_iter_09.png
-[OPE] Policy REJECTED: J_new=0.4183 ≤ J_old=0.4181 + δ=0.0042. Rolling back to behavior policy.
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.900, env_return=1238.16, rl_reward=0.90, steps=4000
-[Data Collection] Success Rate: 0.900, EnvReturn: 1238.16, RLReward: 0.90, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/offline_collection_success_rate.png
-[Dataset] offline collection: all 20 episodes remain in RL replay; IL retrain keeps 18/20 successful episodes (drops 2 failures).
-[Dataset] Merged 20 episodes (4000 steps) → total 60000 steps, 300 episodes
-
-[RL100Trainer] Retraining IL on merged dataset...
-
-============================================================
-[RL100Trainer] Phase 1: Imitation Learning
-============================================================
-
-[BC] Reset policy optimizer state and set LR: 1.00e-04
-[IL] Epoch 0/100, Loss: 0.0038, Val Loss: 0.0111
-[IL] Epoch 1/100, Loss: 0.0033, Val Loss: 0.0090
-[IL] Epoch 2/100, Loss: 0.0035, Val Loss: 0.0096
-[IL] Epoch 3/100, Loss: 0.0034, Val Loss: 0.0089
-[IL] Epoch 4/100, Loss: 0.0031, Val Loss: 0.0062
-[IL] Epoch 5/100, Loss: 0.0030, Val Loss: 0.0095
-[IL] Epoch 6/100, Loss: 0.0030, Val Loss: 0.0072
-[IL] Epoch 7/100, Loss: 0.0031, Val Loss: 0.0091
-[IL] Epoch 8/100, Loss: 0.0031, Val Loss: 0.0117
-[IL] Epoch 9/100, Loss: 0.0031, Val Loss: 0.0113
-[IL] Epoch 10/100, Loss: 0.0031, Val Loss: 0.0114
-[IL] Epoch 11/100, Loss: 0.0031, Val Loss: 0.0093
-[IL] Epoch 12/100, Loss: 0.0033, Val Loss: 0.0099
-[IL] Epoch 13/100, Loss: 0.0029, Val Loss: 0.0110
-[IL] Epoch 14/100, Loss: 0.0030, Val Loss: 0.0095
-[IL] Epoch 15/100, Loss: 0.0030, Val Loss: 0.0101
-[IL] Epoch 16/100, Loss: 0.0030, Val Loss: 0.0048
-[IL] Epoch 17/100, Loss: 0.0028, Val Loss: 0.0069
-[IL] Epoch 18/100, Loss: 0.0029, Val Loss: 0.0082
-[IL] Epoch 19/100, Loss: 0.0029, Val Loss: 0.0103
-[IL] Epoch 20/100, Loss: 0.0032, Val Loss: 0.0095
-[IL] Epoch 21/100, Loss: 0.0033, Val Loss: 0.0120
-[IL] Epoch 22/100, Loss: 0.0031, Val Loss: 0.0083
-[IL] Epoch 23/100, Loss: 0.0030, Val Loss: 0.0087
-[IL] Epoch 24/100, Loss: 0.0030, Val Loss: 0.0076
-[IL] Epoch 25/100, Loss: 0.0028, Val Loss: 0.0073
-[IL] Epoch 26/100, Loss: 0.0027, Val Loss: 0.0082
-[IL] Epoch 27/100, Loss: 0.0026, Val Loss: 0.0092
-[IL] Epoch 28/100, Loss: 0.0028, Val Loss: 0.0082
-[IL] Epoch 29/100, Loss: 0.0031, Val Loss: 0.0096
-[IL] Epoch 30/100, Loss: 0.0029, Val Loss: 0.0125
-[IL] Epoch 31/100, Loss: 0.0032, Val Loss: 0.0104
-[IL] Epoch 32/100, Loss: 0.0028, Val Loss: 0.0088
-[IL] Epoch 33/100, Loss: 0.0028, Val Loss: 0.0081
-[IL] Epoch 34/100, Loss: 0.0030, Val Loss: 0.0118
-[IL] Epoch 35/100, Loss: 0.0029, Val Loss: 0.0122
-[IL] Epoch 36/100, Loss: 0.0030, Val Loss: 0.0096
-[IL] Epoch 37/100, Loss: 0.0028, Val Loss: 0.0086
-[IL] Epoch 38/100, Loss: 0.0026, Val Loss: 0.0134
-[IL] Epoch 39/100, Loss: 0.0028, Val Loss: 0.0113
-[IL] Epoch 40/100, Loss: 0.0032, Val Loss: 0.0107
-[IL] Epoch 41/100, Loss: 0.0029, Val Loss: 0.0096
-[IL] Epoch 42/100, Loss: 0.0026, Val Loss: 0.0121
-[IL] Epoch 43/100, Loss: 0.0026, Val Loss: 0.0111
-[IL] Epoch 44/100, Loss: 0.0028, Val Loss: 0.0110
-[IL] Epoch 45/100, Loss: 0.0028, Val Loss: 0.0132
-[IL] Epoch 46/100, Loss: 0.0029, Val Loss: 0.0095
-[IL] Epoch 47/100, Loss: 0.0038, Val Loss: 0.0073
-[IL] Epoch 48/100, Loss: 0.0030, Val Loss: 0.0146
-[IL] Epoch 49/100, Loss: 0.0029, Val Loss: 0.0092
-[IL] Epoch 50/100, Loss: 0.0029, Val Loss: 0.0085
-[IL] Epoch 51/100, Loss: 0.0028, Val Loss: 0.0090
-[IL] Epoch 52/100, Loss: 0.0029, Val Loss: 0.0073
-[IL] Epoch 53/100, Loss: 0.0028, Val Loss: 0.0076
-[IL] Epoch 54/100, Loss: 0.0030, Val Loss: 0.0106
-[IL] Epoch 55/100, Loss: 0.0025, Val Loss: 0.0076
-[IL] Epoch 56/100, Loss: 0.0030, Val Loss: 0.0097
-[IL] Epoch 57/100, Loss: 0.0033, Val Loss: 0.0098
-[IL] Epoch 58/100, Loss: 0.0026, Val Loss: 0.0101
-[IL] Epoch 59/100, Loss: 0.0025, Val Loss: 0.0108
-[IL] Epoch 60/100, Loss: 0.0028, Val Loss: 0.0074
-[IL] Epoch 61/100, Loss: 0.0028, Val Loss: 0.0111
-[IL] Epoch 62/100, Loss: 0.0026, Val Loss: 0.0096
-[IL] Epoch 63/100, Loss: 0.0027, Val Loss: 0.0155
-[IL] Epoch 64/100, Loss: 0.0028, Val Loss: 0.0107
-[IL] Epoch 65/100, Loss: 0.0028, Val Loss: 0.0125
-[IL] Epoch 66/100, Loss: 0.0030, Val Loss: 0.0115
-[IL] Epoch 67/100, Loss: 0.0027, Val Loss: 0.0113
-[IL] Epoch 68/100, Loss: 0.0024, Val Loss: 0.0097
-[IL] Epoch 69/100, Loss: 0.0026, Val Loss: 0.0090
-[IL] Epoch 70/100, Loss: 0.0026, Val Loss: 0.0119
-[IL] Epoch 71/100, Loss: 0.0026, Val Loss: 0.0112
-[IL] Epoch 72/100, Loss: 0.0027, Val Loss: 0.0080
-[IL] Epoch 73/100, Loss: 0.0026, Val Loss: 0.0098
-[IL] Epoch 74/100, Loss: 0.0024, Val Loss: 0.0086
-[IL] Epoch 75/100, Loss: 0.0025, Val Loss: 0.0116
-[IL] Epoch 76/100, Loss: 0.0028, Val Loss: 0.0079
-[IL] Epoch 77/100, Loss: 0.0028, Val Loss: 0.0108
-[IL] Epoch 78/100, Loss: 0.0027, Val Loss: 0.0156
-[IL] Epoch 79/100, Loss: 0.0028, Val Loss: 0.0097
-[IL] Epoch 80/100, Loss: 0.0026, Val Loss: 0.0113
-[IL] Epoch 81/100, Loss: 0.0030, Val Loss: 0.0099
-[IL] Epoch 82/100, Loss: 0.0028, Val Loss: 0.0088
-[IL] Epoch 83/100, Loss: 0.0028, Val Loss: 0.0067
-[IL] Epoch 84/100, Loss: 0.0027, Val Loss: 0.0120
-[IL] Epoch 85/100, Loss: 0.0025, Val Loss: 0.0077
-[IL] Epoch 86/100, Loss: 0.0026, Val Loss: 0.0088
-[IL] Epoch 87/100, Loss: 0.0026, Val Loss: 0.0098
-[IL] Epoch 88/100, Loss: 0.0026, Val Loss: 0.0071
-[IL] Epoch 89/100, Loss: 0.0027, Val Loss: 0.0097
-[IL] Epoch 90/100, Loss: 0.0029, Val Loss: 0.0102
-[IL] Epoch 91/100, Loss: 0.0032, Val Loss: 0.0079
-[IL] Epoch 92/100, Loss: 0.0026, Val Loss: 0.0075
-[IL] Epoch 93/100, Loss: 0.0027, Val Loss: 0.0104
-[IL] Epoch 94/100, Loss: 0.0028, Val Loss: 0.0154
-[IL] Epoch 95/100, Loss: 0.0028, Val Loss: 0.0089
-[IL] Epoch 96/100, Loss: 0.0029, Val Loss: 0.0093
-[IL] Epoch 97/100, Loss: 0.0025, Val Loss: 0.0094
-[IL] Epoch 98/100, Loss: 0.0025, Val Loss: 0.0080
-[IL] Epoch 99/100, Loss: 0.0024, Val Loss: 0.0115
-test_mean_score: 0.75
-[IL] Eval - Success Rate: 0.750
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/il_loss_retrain_iter_09.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/offline_iter_9.ckpt
-
-================================================================================
-                    PHASE 3: ONLINE RL FINE-TUNING
-================================================================================
-
-[RL PPO] Reset policy optimizer state and set LR: 1.00e-04 → 1.00e-05
-
-[Online RL] Iteration 1/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.950, env_return=1062.16, rl_reward=0.95, steps=4000
-[Data Collection] Success Rate: 0.950, EnvReturn: 1062.16, RLReward: 0.95, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 19/20 successful episodes (drops 1 failures).
-[Online RL] Epoch 1/3, PPO Loss: -0.0072, PostKL: 4.461e-02, PostClipFrac: 0.198938, PostMeanRatio: 0.995572, PostRatioDev: 1.449e-01, GradNorm: 20.7342, Reg Loss: 0.0000, CD Loss: 0.3409
-[Online RL] Epoch 2/3, PPO Loss: 0.0280, PostKL: 1.207e-01, PostClipFrac: 0.285238, PostMeanRatio: 1.004484, PostRatioDev: 2.102e-01, GradNorm: 19.7415, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 3/3, PPO Loss: 0.0460, PostKL: 1.494e-01, PostClipFrac: 0.312372, PostMeanRatio: 1.007336, PostRatioDev: 2.366e-01, GradNorm: 15.3715, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_00.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_00.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_00.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_00.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_00.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_00.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_0.ckpt
-
-[Online RL] Iteration 2/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.800, env_return=1085.81, rl_reward=0.80, steps=4000
-[Data Collection] Success Rate: 0.800, EnvReturn: 1085.81, RLReward: 0.80, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 16/20 successful episodes (drops 4 failures).
-[Online RL] Epoch 1/3, PPO Loss: 0.0015, PostKL: 9.602e-03, PostClipFrac: 0.070426, PostMeanRatio: 0.997733, PostRatioDev: 6.558e-02, GradNorm: 13.9762, Reg Loss: 0.0000, CD Loss: 0.3340
-[Online RL] Epoch 2/3, PPO Loss: 0.0222, PostKL: 4.720e-02, PostClipFrac: 0.198781, PostMeanRatio: 1.000635, PostRatioDev: 1.401e-01, GradNorm: 11.0975, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 3/3, PPO Loss: 0.0382, PostKL: 7.766e-02, PostClipFrac: 0.257304, PostMeanRatio: 1.010251, PostRatioDev: 1.794e-01, GradNorm: 11.0762, Reg Loss: 0.0000, CD Loss: 0.3298
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_01.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_01.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_01.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_01.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_01.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_01.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_1.ckpt
-
-[Online RL] Iteration 3/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.950, env_return=1183.40, rl_reward=0.95, steps=4000
-[Data Collection] Success Rate: 0.950, EnvReturn: 1183.40, RLReward: 0.95, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 19/20 successful episodes (drops 1 failures).
-[Online RL] Epoch 1/3, PPO Loss: -0.0006, PostKL: 5.309e-03, PostClipFrac: 0.029368, PostMeanRatio: 1.002040, PostRatioDev: 4.413e-02, GradNorm: 15.7164, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 2/3, PPO Loss: 0.0180, PostKL: 3.645e-02, PostClipFrac: 0.129194, PostMeanRatio: 1.019167, PostRatioDev: 1.184e-01, GradNorm: 13.1024, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 3/3, PPO Loss: 0.0327, PostKL: 1.708e-01, PostClipFrac: 0.206914, PostMeanRatio: 1.135030, PostRatioDev: 2.794e-01, GradNorm: 11.3758, Reg Loss: 0.0000, CD Loss: 0.3321
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_02.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_02.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_02.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_02.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_02.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_02.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_2.ckpt
-
-[Online RL] Iteration 4/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.750, env_return=1137.37, rl_reward=0.75, steps=4000
-[Data Collection] Success Rate: 0.750, EnvReturn: 1137.37, RLReward: 0.75, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 15/20 successful episodes (drops 5 failures).
-[Online RL] Epoch 1/3, PPO Loss: 0.0003, PostKL: 4.476e-03, PostClipFrac: 0.031620, PostMeanRatio: 1.000277, PostRatioDev: 4.322e-02, GradNorm: 17.7674, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 2/3, PPO Loss: 0.0125, PostKL: 3.342e-02, PostClipFrac: 0.144752, PostMeanRatio: 1.008495, PostRatioDev: 1.137e-01, GradNorm: 14.5147, Reg Loss: 0.0000, CD Loss: 0.3397
-[Online RL] Epoch 3/3, PPO Loss: 0.0263, PostKL: 4.670e-02, PostClipFrac: 0.199009, PostMeanRatio: 1.012300, PostRatioDev: 1.400e-01, GradNorm: 9.4037, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_03.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_03.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_03.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_03.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_03.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_03.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_3.ckpt
-
-[Online RL] Iteration 5/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.900, env_return=1129.04, rl_reward=0.90, steps=4000
-[Data Collection] Success Rate: 0.900, EnvReturn: 1129.04, RLReward: 0.90, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 18/20 successful episodes (drops 2 failures).
-[Online RL] Epoch 1/3, PPO Loss: 0.0013, PostKL: 4.418e-03, PostClipFrac: 0.024117, PostMeanRatio: 0.998931, PostRatioDev: 3.875e-02, GradNorm: 16.5048, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 2/3, PPO Loss: 0.0175, PostKL: 2.839e-02, PostClipFrac: 0.115017, PostMeanRatio: 1.006241, PostRatioDev: 9.832e-02, GradNorm: 12.5167, Reg Loss: 0.0000, CD Loss: 0.3380
-[Online RL] Epoch 3/3, PPO Loss: 0.0337, PostKL: 5.789e-02, PostClipFrac: 0.185262, PostMeanRatio: 1.016828, PostRatioDev: 1.492e-01, GradNorm: 13.4394, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_04.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_04.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_04.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_04.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_04.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_04.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_4.ckpt
-
-[Online RL] Iteration 6/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.750, env_return=1075.74, rl_reward=0.75, steps=4000
-[Data Collection] Success Rate: 0.750, EnvReturn: 1075.74, RLReward: 0.75, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 15/20 successful episodes (drops 5 failures).
-[Online RL] Epoch 1/3, PPO Loss: -0.0004, PostKL: 3.538e-03, PostClipFrac: 0.024932, PostMeanRatio: 0.998135, PostRatioDev: 3.807e-02, GradNorm: 15.0061, Reg Loss: 0.0000, CD Loss: 0.3254
-[Online RL] Epoch 2/3, PPO Loss: 0.0195, PostKL: 2.166e-02, PostClipFrac: 0.124534, PostMeanRatio: 0.999982, PostRatioDev: 9.761e-02, GradNorm: 10.6553, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 3/3, PPO Loss: 0.0342, PostKL: 4.644e-02, PostClipFrac: 0.205363, PostMeanRatio: 1.007339, PostRatioDev: 1.491e-01, GradNorm: 10.8639, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_05.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_05.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_05.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_05.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_05.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_05.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_5.ckpt
-
-[Online RL] Iteration 7/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.950, env_return=1084.18, rl_reward=0.95, steps=4000
-[Data Collection] Success Rate: 0.950, EnvReturn: 1084.18, RLReward: 0.95, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 19/20 successful episodes (drops 1 failures).
-[Online RL] Epoch 1/3, PPO Loss: -0.0011, PostKL: 4.283e-03, PostClipFrac: 0.031481, PostMeanRatio: 1.001827, PostRatioDev: 4.894e-02, GradNorm: 18.3318, Reg Loss: 0.0000, CD Loss: 0.3261
-[Online RL] Epoch 2/3, PPO Loss: 0.0161, PostKL: 1.970e-02, PostClipFrac: 0.136224, PostMeanRatio: 1.006311, PostRatioDev: 1.065e-01, GradNorm: 11.8597, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 3/3, PPO Loss: 0.0286, PostKL: 4.077e-02, PostClipFrac: 0.209415, PostMeanRatio: 1.012371, PostRatioDev: 1.519e-01, GradNorm: 10.6521, Reg Loss: 0.0000, CD Loss: 0.3378
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_06.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_06.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_06.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_06.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_06.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_06.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_6.ckpt
-
-[Online RL] Iteration 8/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.750, env_return=1124.26, rl_reward=0.75, steps=4000
-[Data Collection] Success Rate: 0.750, EnvReturn: 1124.26, RLReward: 0.75, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 15/20 successful episodes (drops 5 failures).
-[Online RL] Epoch 1/3, PPO Loss: 0.0010, PostKL: 3.682e-03, PostClipFrac: 0.034299, PostMeanRatio: 1.000044, PostRatioDev: 4.410e-02, GradNorm: 16.4316, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 2/3, PPO Loss: 0.0151, PostKL: 2.139e-02, PostClipFrac: 0.131027, PostMeanRatio: 1.004782, PostRatioDev: 1.063e-01, GradNorm: 13.8643, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 3/3, PPO Loss: 0.0286, PostKL: 4.406e-02, PostClipFrac: 0.195487, PostMeanRatio: 1.013818, PostRatioDev: 1.499e-01, GradNorm: 11.4867, Reg Loss: 0.0000, CD Loss: 0.3376
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_07.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_07.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_07.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_07.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_07.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_07.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_7.ckpt
-
-[Online RL] Iteration 9/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.900, env_return=1151.23, rl_reward=0.90, steps=4000
-[Data Collection] Success Rate: 0.900, EnvReturn: 1151.23, RLReward: 0.90, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 18/20 successful episodes (drops 2 failures).
-[Online RL] Epoch 1/3, PPO Loss: 0.0017, PostKL: 2.583e-03, PostClipFrac: 0.025504, PostMeanRatio: 0.997845, PostRatioDev: 3.860e-02, GradNorm: 16.5628, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 2/3, PPO Loss: 0.0160, PostKL: 1.483e-02, PostClipFrac: 0.124989, PostMeanRatio: 0.996575, PostRatioDev: 9.440e-02, GradNorm: 11.3704, Reg Loss: 0.0000, CD Loss: 0.3312
-[Online RL] Epoch 3/3, PPO Loss: 0.0270, PostKL: 3.156e-02, PostClipFrac: 0.188791, PostMeanRatio: 1.000904, PostRatioDev: 1.367e-01, GradNorm: 13.2614, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_08.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_08.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_08.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_08.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_08.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_08.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_8.ckpt
-
-[Online RL] Iteration 10/10
-
-[RL100Trainer] Phase 2c: Collecting New Data (Iteration 9)
-[Collect] 20 episodes, success=0.750, env_return=975.11, rl_reward=0.75, steps=4000
-[Data Collection] Success Rate: 0.750, EnvReturn: 975.11, RLReward: 0.75, Episodes: 20, Steps: 4000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_collection_success_rate.png
-[Dataset] online collection: all 20 episodes remain in RL replay; IL retrain keeps 15/20 successful episodes (drops 5 failures).
-[Online RL] Epoch 1/3, PPO Loss: -0.0010, PostKL: 5.204e-03, PostClipFrac: 0.024736, PostMeanRatio: 0.999142, PostRatioDev: 3.832e-02, GradNorm: 19.2709, Reg Loss: 0.0000, CD Loss: 0.0000
-[Online RL] Epoch 2/3, PPO Loss: 0.0153, PostKL: 2.577e-02, PostClipFrac: 0.108080, PostMeanRatio: 1.001921, PostRatioDev: 8.857e-02, GradNorm: 14.1572, Reg Loss: 0.0000, CD Loss: 0.3334
-[Online RL] Epoch 3/3, PPO Loss: 0.0321, PostKL: 5.521e-02, PostClipFrac: 0.172423, PostMeanRatio: 1.016988, PostRatioDev: 1.383e-01, GradNorm: 12.9106, Reg Loss: 0.0000, CD Loss: 0.0000
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_v_loss_iter_09.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_loss_iter_09.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_kl_iter_09.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_clipfrac_iter_09.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_ppo_gradnorm_iter_09.png
-[Plot] Saved: /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/plots/online_cd_loss_iter_09.png
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/online_iter_9.ckpt
-
-================================================================================
-                         TRAINING COMPLETE!
-================================================================================
-
-[Checkpoint] Saved to /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints/final.ckpt
-
-[Evaluation] Running final evaluation...
-test_mean_score: 0.83
-test_mean_score: 0.01
-
-================================================================================
-                         FINAL RESULTS
-================================================================================
-[ddim]
-mean_traj_rewards: 12285.9861
-mean_success_rates: 0.8300
-test_mean_score: 0.8300
-SR_test_L3: 0.8400
-SR_test_L5: 0.8340
-[cm]
-mean_traj_rewards: 2152.7849
-mean_success_rates: 0.0100
-test_mean_score: 0.0100
-SR_test_L3: 0.8400
-SR_test_L5: 0.8340
-
-[Training] Complete! Checkpoints saved to:
-  /nfs_global/S/yangrongzheng/RL100/3D-Diffusion-Policy/3D-Diffusion-Policy/checkpoints
-Found 8 GPUs for rendering. Using device 0.
-Extracting GPU stats logs using atop has been completed on r8a30-a06.
-Logs are being saved to: /nfs_global/S/yangrongzheng/atop-740901-r8a30-a06-gpustat.log
-Job end at 2026-03-26 05:40:49
+[IL] Epoch 0/100, Loss: 0.0087, Val Loss: 0.0802
+[IL] Epoch 1/100, Loss: 0.0081, Val Loss: 0.0971
+[IL] Epoch 2/100, Loss: 0.0082, Val Loss: 0.1184
+[IL] Epoch 3/100, Loss: 0.0083, Val Loss: 0.1127
+[IL] Epoch 4/100, Loss: 0.0079, Val Loss: 0.1208
+[IL] Epoch 5/100, Loss: 0.0079, Val Loss: 0.1310
+[IL] Epoch 6/100, Loss: 0.0078, Val Loss: 0.1271
+[IL] Epoch 7/100, Loss: 0.0082, Val Loss: 0.1165
+[IL] Epoch 8/100, Loss: 0.0078, Val Loss: 0.1483
+[IL] Epoch 9/100, Loss: 0.0080, Val Loss: 0.1307
+[IL] Epoch 10/100, Loss: 0.0079, Val Loss: 0.1134
+[IL] Epoch 11/100, Loss: 0.0079, Val Loss: 0.1110
+[IL] Epoch 12/100, Loss: 0.0080, Val Loss: 0.1006
+[IL] Epoch 13/100, Loss: 0.0077, Val Loss: 0.1163
+[IL] Epoch 14/100, Loss: 0.0079, Val Loss: 0.1155
+[IL] Epoch 15/100, Loss: 0.0076, Val Loss: 0.1212
+[IL] Epoch 16/100, Loss: 0.0077, Val Loss: 0.1241
+[IL] Epoch 17/100, Loss: 0.0078, Val Loss: 0.1046
+[IL] Epoch 18/100, Loss: 0.0079, Val Loss: 0.1180
+[IL] Epoch 19/100, Loss: 0.0077, Val Loss: 0.1600
+[IL] Epoch 20/100, Loss: 0.0078, Val Loss: 0.1456
+[IL] Epoch 21/100, Loss: 0.0077, Val Loss: 0.1286
+[IL] Epoch 22/100, Loss: 0.0076, Val Loss: 0.1173
+[IL] Epoch 23/100, Loss: 0.0075, Val Loss: 0.1223
+[IL] Epoch 24/100, Loss: 0.0074, Val Loss: 0.1179
+[IL] Epoch 25/100, Loss: 0.0074, Val Loss: 0.1427
+[IL] Epoch 26/100, Loss: 0.0078, Val Loss: 0.1660
+[IL] Epoch 27/100, Loss: 0.0073, Val Loss: 0.1243
+[IL] Epoch 28/100, Loss: 0.0074, Val Loss: 0.1154
+[IL] Epoch 29/100, Loss: 0.0078, Val Loss: 0.1184
+[IL] Epoch 30/100, Loss: 0.0073, Val Loss: 0.1373
+[IL] Epoch 31/100, Loss: 0.0074, Val Loss: 0.1448
+[IL] Epoch 32/100, Loss: 0.0077, Val Loss: 0.1567
+[IL] Epoch 33/100, Loss: 0.0072, Val Loss: 0.1270
+[IL] Epoch 34/100, Loss: 0.0075, Val Loss: 0.1309
+[IL] Epoch 35/100, Loss: 0.0075, Val Loss: 0.1103
+[IL] Epoch 36/100, Loss: 0.0074, Val Loss: 0.1174
+[IL] Epoch 37/100, Loss: 0.0072, Val Loss: 0.1274
+[IL] Epoch 38/100, Loss: 0.0074, Val Loss: 0.1360
+[IL] Epoch 39/100, Loss: 0.0074, Val Loss: 0.1575
+[IL] Epoch 40/100, Loss: 0.0073, Val Loss: 0.1411
+[IL] Epoch 41/100, Loss: 0.0074, Val Loss: 0.1221
+[IL] Epoch 42/100, Loss: 0.0072, Val Loss: 0.1241
+[IL] Epoch 43/100, Loss: 0.0073, Val Loss: 0.1396
+[IL] Epoch 44/100, Loss: 0.0073, Val Loss: 0.1407
+[IL] Epoch 45/100, Loss: 0.0070, Val Loss: 0.1457
+[IL] Epoch 46/100, Loss: 0.0071, Val Loss: 0.1352
+[IL] Epoch 47/100, Loss: 0.0073, Val Loss: 0.1285
+[IL] Epoch 48/100, Loss: 0.0073, Val Loss: 0.1602
+[IL] Epoch 49/100, Loss: 0.0074, Val Loss: 0.0850
+[IL] Epoch 50/100, Loss: 0.0070, Val Loss: 0.1094
+[IL] Epoch 51/100, Loss: 0.0069, Val Loss: 0.1333
+[IL] Epoch 52/100, Loss: 0.0068, Val Loss: 0.1230
+[IL] Epoch 53/100, Loss: 0.0070, Val Loss: 0.1286
+[IL] Epoch 54/100, Loss: 0.0071, Val Loss: 0.1578
+[IL] Epoch 55/100, Loss: 0.0070, Val Loss: 0.1345
+[IL] Epoch 56/100, Loss: 0.0071, Val Loss: 0.1651
+[IL] Epoch 57/100, Loss: 0.0071, Val Loss: 0.1279
+[IL] Epoch 58/100, Loss: 0.0071, Val Loss: 0.1265
+[IL] Epoch 59/100, Loss: 0.0071, Val Loss: 0.1338
+[IL] Epoch 60/100, Loss: 0.0067, Val Loss: 0.1381
+[IL] Epoch 61/100, Loss: 0.0066, Val Loss: 0.1713
+[IL] Epoch 62/100, Loss: 0.0070, Val Loss: 0.1255
+[IL] Epoch 63/100, Loss: 0.0069, Val Loss: 0.1590
+[IL] Epoch 64/100, Loss: 0.0071, Val Loss: 0.1298
+[IL] Epoch 65/100, Loss: 0.0071, Val Loss: 0.1404
+[IL] Epoch 66/100, Loss: 0.0069, Val Loss: 0.1328
+[IL] Epoch 67/100, Loss: 0.0066, Val Loss: 0.1555
+[IL] Epoch 68/100, Loss: 0.0067, Val Loss: 0.1539
+[IL] Epoch 69/100, Loss: 0.0069, Val Loss: 0.1036
+[IL] Epoch 70/100, Loss: 0.0066, Val Loss: 0.1191
+[IL] Epoch 71/100, Loss: 0.0068, Val Loss: 0.1509
+[IL] Epoch 72/100, Loss: 0.0069, Val Loss: 0.1270
+[IL] Epoch 73/100, Loss: 0.0069, Val Loss: 0.1297
+[IL] Epoch 74/100, Loss: 0.0071, Val Loss: 0.1153
+[IL] Epoch 75/100, Loss: 0.0067, Val Loss: 0.0981
+[IL] Epoch 76/100, Loss: 0.0068, Val Loss: 0.1426
+[IL] Epoch 77/100, Loss: 0.0065, Val Loss: 0.1271
+[IL] Epoch 78/100, Loss: 0.0066, Val Loss: 0.1441
+[IL] Epoch 79/100, Loss: 0.0067, Val Loss: 0.1379
+[IL] Epoch 80/100, Loss: 0.0067, Val Loss: 0.1427
+[IL] Epoch 81/100, Loss: 0.0066, Val Loss: 0.1289
+[IL] Epoch 82/100, Loss: 0.0068, Val Loss: 0.1718
+[IL] Epoch 83/100, Loss: 0.0066, Val Loss: 0.1702
+[IL] Epoch 84/100, Loss: 0.0067, Val Loss: 0.1469
+[IL] Epoch 85/100, Loss: 0.0066, Val Loss: 0.0931
+[IL] Epoch 86/100, Loss: 0.0065, Val Loss: 0.1361
+[IL] Epoch 87/100, Loss: 0.0067, Val Loss: 0.1209
+[IL] Epoch 88/100, Loss: 0.0065, Val Loss: 0.1557
+[IL] Epoch 89/100, Loss: 0.0065, Val Loss: 0.1380
+[IL] Epoch 90/100, Loss: 0.0065, Val Loss: 0.1430
+[IL] Epoch 91/100, Loss: 0.0063, Val Loss: 0.1090
+[IL] Epoch 92/100, Loss: 0.0064, Val Loss: 0.1575
+[IL] Epoch 93/100, Loss: 0.0066, Val Loss: 0.1807
+[IL] Epoch 94/100, Loss: 0.0066, Val Loss: 0.1752
+[IL] Epoch 95/100, Loss: 0.0063, Val Loss: 0.1312
+[IL] Epoch 96/100, Loss: 0.0065, Val Loss: 0.1846
+[IL] Epoch 97/100, Loss: 0.0062, Val Loss: 0.1521
+[IL] Epoch 98/100, Loss: 0.0065, Val Loss: 0.1716
+[IL] Epoch 99/100, Loss: 0.0064, Val Loss: 0.1546
+Extracting GPU stats logs using atop has been completed on r8l40s-a05.
+Logs are being saved to: /nfs_global/S/yangrongzheng/atop-743903-r8l40s-a05-gpustat.log

@@ -1,0 +1,64 @@
+defaults:
+  - rl100
+  - override task: realrobot_pick_place_dexcollector
+  - _self_
+
+name: train_rl100_qam_pick_place_offline_ur5e
+exp_name: qam_pick_place_offline_ur5e
+
+task:
+  task_name: pick_place
+  dataset_zarr_path: data/dex-data-train84.zarr
+  image_height: 84
+  image_width: 84
+  use_mask: false
+  use_right_cam_img: true
+  obs_mode: auto
+  arm_action_mode: joint
+  arm_state_mode: joint
+  arm_encoding: normalized_minus1_1
+  arm_norm_center: 0.0
+  arm_norm_scale: 6.283185307179586
+  clip_normalized_arm_action: true
+
+policy:
+  generative_mode: flow_matching
+  flow_sampling_steps: 8
+  down_dims: [256, 512, 1024]
+  obs_mode: ${task.obs_mode}
+  use_mask: ${task.use_mask}
+  use_right_cam_img: ${task.use_right_cam_img}
+  rgb_encoder_type: dp_resnet
+  rgb_encoder_cfg:
+    crop_shape:
+      - ${task.image_height}
+      - ${task.image_width}
+    stage_channels: [32, 64, 128, 256]
+    blocks_per_stage: 2
+    use_group_norm: true
+
+training:
+  offline_policy_backend: qam
+  run_online_rl: false
+  resume: true
+  resume_load_rl_state: false
+  resume_path: checkpoints/after_il.ckpt
+  num_offline_iterations: 1
+  offline_collect_new_data: true
+  collection_episodes: 1
+  retrain_il_after_collection: true
+  il_retrain_epochs: 150
+  critic_epochs: 10
+  offline_critic_steps: 2000
+  ppo_epochs: 1
+  offline_ppo_steps: 500
+
+dataloader:
+  batch_size: 32
+  num_workers: 2
+
+runtime:
+  collection_policy: flow
+  collection_use_ema: false
+  il_retrain_success_only: true
+  final_eval_policies: []

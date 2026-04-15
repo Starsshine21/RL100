@@ -1,0 +1,57 @@
+name: realrobot_dualcam13dof
+
+task_name: realrobot_dualcam13dof
+
+execution:
+  mode: real_robot
+  enable_eval: false
+  enable_amq: false
+  enable_cm_policy: false
+  stop_env_on_keyboard_interrupt: true
+
+shape_meta: &shape_meta
+  obs:
+    right_state:
+      shape: [13]
+      type: low_dim
+    rgbm:
+      shape: [84, 84, 4]
+      type: rgb
+    right_cam_img:
+      shape: [84, 84, 3]
+      type: rgb
+  action:
+    shape: [13]
+
+env_runner:
+  _target_: diffusion_policy_3d.env_runner.real_robot_runner.RealRobotRunner
+  env: null
+  shape_meta: *shape_meta
+  eval_episodes: 20
+  max_steps: 200
+  n_obs_steps: ${n_obs_steps}
+  n_action_steps: ${n_action_steps}
+  task_name: ${task_name}
+  fps: 10
+  tqdm_interval_sec: 5.0
+  episode_end_mode: env_or_manual_or_max_steps
+  reward_mode: terminal_sparse_manual
+  success_reward: 1.0
+  failure_reward: 0.0
+  gamma: 0.99
+  prompt_after_chunk: true
+  prompt_for_terminal_label: true
+  stop_on_keyboard_interrupt: ${task.execution.stop_env_on_keyboard_interrupt}
+
+dataset:
+  _target_: diffusion_policy_3d.dataset.real_robot_dataset.RealRobotDataset
+  zarr_path: data/realrobot_dualcam13dof.zarr
+  shape_meta: *shape_meta
+  horizon: ${horizon}
+  pad_before: ${eval:'${n_obs_steps}-1'}
+  pad_after: ${eval:'${n_action_steps}-1'}
+  seed: 42
+  val_ratio: 0.02
+  max_train_episodes: null
+  n_action_steps: ${n_action_steps}
+  gamma: 0.99

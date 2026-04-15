@@ -1,0 +1,63 @@
+name: realrobot_pick_place_processed
+
+task_name: pick_place
+image_height: 84
+image_width: 84
+dataset_zarr_path: data/dex-data-train84.zarr
+use_mask: false
+use_right_cam_img: true
+obs_mode: auto  # advanced override: head_rgb, rgbm, head_rgb_right_cam, full, state, or auto
+
+execution:
+  mode: real_robot
+  enable_eval: false
+  enable_amq: false
+  enable_cm_policy: false
+  stop_env_on_keyboard_interrupt: true
+
+shape_meta: &shape_meta
+  obs:
+    right_state:
+      shape: [12]
+      type: low_dim
+    head_rgb:
+      shape:
+        - ${task.image_height}
+        - ${task.image_width}
+        - 3
+      type: rgb
+    rgbm:
+      shape:
+        - ${task.image_height}
+        - ${task.image_width}
+        - 4
+      type: rgb
+    right_cam_img:
+      shape:
+        - ${task.image_height}
+        - ${task.image_width}
+        - 3
+      type: rgb
+  action:
+    shape: [12]
+
+env_runner: null
+
+dataset:
+  _target_: diffusion_policy_3d.dataset.real_robot_dataset.RealRobotDataset
+  zarr_path: ${task.dataset_zarr_path}
+  shape_meta: *shape_meta
+  horizon: ${horizon}
+  pad_before: ${eval:'${n_obs_steps}-1'}
+  pad_after: ${eval:'${n_action_steps}-1'}
+  seed: 42
+  val_ratio: 0.02
+  max_train_episodes: null
+  n_action_steps: ${n_action_steps}
+  n_obs_steps: ${n_obs_steps}
+  gamma: 0.99
+  obs_mode: ${task.obs_mode}
+  use_mask: ${task.use_mask}
+  use_right_cam_img: ${task.use_right_cam_img}
+  replay_buffer_backend: zarr
+  replay_buffer_mode: a

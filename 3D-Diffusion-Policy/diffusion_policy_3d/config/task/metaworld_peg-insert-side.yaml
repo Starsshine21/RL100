@@ -2,10 +2,22 @@ name: peg-insert-side
 
 task_name: ${.name}
 
+point_cloud:
+  num_points: 512
+  channels: 3
+  use_pc_color: false
+  use_point_crop: true
+  sampling_method: fps
+
+demonstration:
+  num_episodes: 100
+
 shape_meta: &shape_meta
   obs:
     point_cloud:
-      shape: [512, 3]
+      shape:
+        - ${task.point_cloud.num_points}
+        - ${task.point_cloud.channels}
       type: point_cloud
     agent_pos:
       shape: [9]
@@ -24,8 +36,10 @@ env_runner:
   n_test: null
   task_name: ${task_name}
   device: ${training.device}
-  use_point_crop: ${policy.use_point_crop}
-  num_points: 512
+  use_point_crop: ${task.point_cloud.use_point_crop}
+  use_pc_color: ${task.point_cloud.use_pc_color}
+  point_sampling_method: ${task.point_cloud.sampling_method}
+  num_points: ${task.point_cloud.num_points}
 
 dataset:
   _target_: diffusion_policy_3d.dataset.metaworld_dataset.MetaworldDataset

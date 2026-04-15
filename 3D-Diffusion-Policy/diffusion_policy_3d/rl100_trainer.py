@@ -27,6 +27,7 @@ Args:
 """
 
 import os
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -47,10 +48,17 @@ from diffusion_policy_3d.policy.rl100_policy import RL100Policy
 from diffusion_policy_3d.policy.consistency_policy import ConsistencyPolicyWrapper
 from diffusion_policy_3d.policy.base_policy import BasePolicy
 from diffusion_policy_3d.model.rl.iql_critics import IQLCritics
+from diffusion_policy_3d.model.rl.qam_critics import QAMCritics
 from diffusion_policy_3d.model.rl.consistency_model import ConsistencyModel, ConsistencyDistillation
 from diffusion_policy_3d.model.rl.transition_model import TransitionModel
 from diffusion_policy_3d.model.diffusion.ema_model import EMAModel
 from diffusion_policy_3d.common.pytorch_util import dict_apply, optimizer_to
+from diffusion_policy_3d.common.config_util import (
+    get_task_execution_mode,
+    is_amq_enabled,
+    is_cm_policy_enabled,
+    is_eval_enabled,
+)
 from diffusion_policy_3d.common.replay_buffer import ReplayBuffer
 from diffusion_policy_3d.dataset.base_dataset import BaseDataset
 from diffusion_policy_3d.env_runner.base_runner import BaseRunner
@@ -93,11 +101,30 @@ class RL100Trainer:
         self.config = config
         self._output_dir = output_dir
         self.device = torch.device(config.training.device)
+        self.offline_policy_backend = str(
+            getattr(config.training, 'offline_policy_backend', 'ppo')
+        ).lower()
 
         # Initialize policy (RL100Policy extends DP3)
         cprint("[RL100Trainer] Initializing RL100Policy...", "cyan")
         self.policy: RL100Policy = hydra.utils.instantiate(config.policy)
         self.policy.to(self.device)
+        self.generative_mode = str(getattr(self.policy, 'generative_mode', 'diffusion')).lower()
+        cprint(
+            f"[RL100Trainer] offline_policy_backend={self.offline_policy_backend}, "
+            f"generative_mode={self.generative_mode}",
+            "cyan",
+        )
+        if self.offline_policy_backend == 'ppo' and self.generative_mode != 'diffusion':
+            raise ValueError(
+                "RL100 PPO backend currently requires policy.generative_mode=diffusion."
+            )
+        if self.offline_policy_backend == 'qam' and self.generative_mode != 'flow_matching':
+            raise ValueError(
+                "QAM backend requires policy.generative_mode=flow_matching."
+            )
+        if self.offline_policy_backend == 'qam' and not bool(getattr(self.policy, 'obs_as_global_cond', True)):
+            raise NotImplementedError("QAM backend currently requires obs_as_global_cond=True.")
 
         # EMA model
         self.ema_policy = None
@@ -114,67 +141,121 @@ class RL100Trainer:
             params=self.policy.parameters()
         )
 
-        # Initialize IQL Critics
-        cprint("[RL100Trainer] Initializing IQL Critics...", "cyan")
         obs_dim = self.policy.obs_feature_dim * self.policy.n_obs_steps  # Flattened obs feature dim across all obs steps
         critic_action_dim = self.policy.chunk_action_dim
         model_action_dim = self.policy.action_dim
+        critics_cfg = config.critics
+        default_hidden_dims = tuple(getattr(critics_cfg, 'hidden_dims', [256, 256, 256]))
+        q_hidden_dims = tuple(getattr(critics_cfg, 'q_hidden_dims', default_hidden_dims))
+        v_hidden_dims = tuple(getattr(critics_cfg, 'v_hidden_dims', default_hidden_dims))
 
-        self.critics = IQLCritics(
-            obs_dim=obs_dim,
-            action_dim=critic_action_dim,
-            hidden_dims=config.critics.hidden_dims,
-            gamma=config.critics.gamma,
-            tau=config.critics.tau
-        )
-        self.critics.to(self.device)
+        self.critics = None
+        self.qam_critics = None
+        self.v_optimizer = None
+        self.q_optimizer = None
+        self.consistency_model = None
+        self.consistency_optimizer = None
+        self.consistency_distillation = None
+        self.transition_model = None
 
-        # Optimizers for critics
-        self.v_optimizer = hydra.utils.instantiate(
-            config.optimizer.v_network,
-            params=self.critics.v_network.parameters()
-        )
-        self.q_optimizer = hydra.utils.instantiate(
-            config.optimizer.q_network,
-            params=self.critics.q_network.parameters()
-        )
+        if self.offline_policy_backend == 'ppo':
+            cprint("[RL100Trainer] Initializing IQL Critics...", "cyan")
+            self.critics = IQLCritics(
+                obs_dim=obs_dim,
+                action_dim=critic_action_dim,
+                q_hidden_dims=q_hidden_dims,
+                v_hidden_dims=v_hidden_dims,
+                gamma=critics_cfg.gamma,
+                tau=critics_cfg.tau,
+                use_layernorm=bool(getattr(critics_cfg, 'use_layernorm', True)),
+                dropout=float(getattr(critics_cfg, 'dropout', 0.0)),
+                activation=str(getattr(critics_cfg, 'activation', 'mish')),
+            )
+            self.critics.to(self.device)
 
-        # Initialize Consistency Model
-        cprint("[RL100Trainer] Initializing Consistency Model...", "cyan")
-        self.consistency_model = ConsistencyModel(
-            input_dim=model_action_dim,
-            global_cond_dim=(
-                self.policy.obs_feature_dim
-                if "cross_attention" in self.policy.condition_type
-                else obs_dim
-            ),
-            diffusion_step_embed_dim=config.policy.diffusion_step_embed_dim,
-            down_dims=config.policy.down_dims,
-            condition_type=config.policy.condition_type
-        )
-        self.consistency_model.to(self.device)
+            self.v_optimizer = hydra.utils.instantiate(
+                config.optimizer.v_network,
+                params=self.critics.v_network.parameters()
+            )
+            self.q_optimizer = hydra.utils.instantiate(
+                config.optimizer.q_network,
+                params=self.critics.q_network.parameters()
+            )
+        elif self.offline_policy_backend == 'qam':
+            cprint("[RL100Trainer] Initializing QAM critic ensemble...", "cyan")
+            qam_cfg = getattr(config, 'qam', OmegaConf.create())
+            self.qam_critics = QAMCritics(
+                obs_dim=obs_dim,
+                action_dim=critic_action_dim,
+                num_qs=int(getattr(qam_cfg, 'num_qs', 10)),
+                hidden_dims=tuple(getattr(qam_cfg, 'hidden_dims', q_hidden_dims)),
+                gamma=float(getattr(qam_cfg, 'discount', critics_cfg.gamma)),
+                rho=float(getattr(qam_cfg, 'rho', 0.5)),
+                target_update_tau=float(getattr(qam_cfg, 'tau', 0.005)),
+                use_layernorm=bool(getattr(qam_cfg, 'use_layernorm', False)),
+                dropout=float(getattr(qam_cfg, 'dropout', 0.0)),
+                activation=str(getattr(qam_cfg, 'activation', 'relu')),
+            )
+            self.qam_critics.to(self.device)
+            self.q_optimizer = hydra.utils.instantiate(
+                config.optimizer.q_network,
+                params=self.qam_critics.q_networks.parameters()
+            )
+        else:
+            raise ValueError(
+                f"Unsupported training.offline_policy_backend={self.offline_policy_backend}"
+            )
 
-        self.consistency_optimizer = hydra.utils.instantiate(
-            config.optimizer.consistency,
-            params=self.consistency_model.parameters()
-        )
+        if self.offline_policy_backend == 'ppo':
+            cprint("[RL100Trainer] Initializing Consistency Model...", "cyan")
+            self.consistency_model = ConsistencyModel(
+                input_dim=model_action_dim,
+                global_cond_dim=(
+                    self.policy.obs_feature_dim
+                    if "cross_attention" in self.policy.condition_type
+                    else obs_dim
+                ),
+                diffusion_step_embed_dim=config.policy.diffusion_step_embed_dim,
+                down_dims=config.policy.down_dims,
+                condition_type=config.policy.condition_type,
+                max_timestep=int(config.policy.noise_scheduler.num_train_timesteps) - 1,
+            )
+            self.consistency_model.to(self.device)
 
-        self.consistency_distillation = ConsistencyDistillation(
-            teacher_policy=self.policy,
-            student_model=self.consistency_model,
-            student_optimizer=self.consistency_optimizer
-        )
+            self.consistency_optimizer = hydra.utils.instantiate(
+                config.optimizer.consistency,
+                params=self.consistency_model.parameters()
+            )
 
-        # Initialize Transition Model (Algorithm 1, Line 6)
-        cprint("[RL100Trainer] Initializing Transition Model T_θ(s'|s,a)...", "cyan")
-        self.transition_model = TransitionModel(
-            obs_feature_dim=obs_dim,    # same flattened dim used by critics
-            action_dim=critic_action_dim,
-            hidden_dims=(200, 200, 200, 200),
-            num_ensemble=7,
-            num_elites=5,
-            device=str(self.device),
-        )
+            self.consistency_distillation = ConsistencyDistillation(
+                teacher_policy=self.policy,
+                student_model=self.consistency_model,
+                student_optimizer=self.consistency_optimizer
+            )
+
+        if self.offline_policy_backend == 'ppo':
+            cprint("[RL100Trainer] Initializing Transition Model T_θ(s'|s,a)...", "cyan")
+            transition_cfg = getattr(config, 'transition', None)
+            transition_hidden_dims = tuple(getattr(transition_cfg, 'hidden_dims', (200, 200, 200, 200)))
+            transition_weight_decays_cfg = getattr(
+                transition_cfg,
+                'weight_decays',
+                (2.5e-5, 5e-5, 7.5e-5, 7.5e-5, 1e-4),
+            )
+            transition_weight_decays = (
+                None if transition_weight_decays_cfg is None
+                else tuple(transition_weight_decays_cfg)
+            )
+            self.transition_model = TransitionModel(
+                obs_feature_dim=obs_dim,
+                action_dim=critic_action_dim,
+                hidden_dims=transition_hidden_dims,
+                num_ensemble=int(getattr(transition_cfg, 'num_ensemble', 7)),
+                num_elites=int(getattr(transition_cfg, 'num_elites', 5)),
+                lr=float(getattr(transition_cfg, 'lr', 1e-3)),
+                weight_decays=transition_weight_decays,
+                device=str(self.device),
+            )
 
         # Training state
         self.global_step = 0
@@ -182,6 +263,11 @@ class RL100Trainer:
         self.offline_rl_iteration = 0
         self.offline_collection_success_history = []
         self.online_collection_success_history = []
+        self.online_eval_score_history = []
+        self.best_ddim_score = float('-inf')
+        self.best_ddim_source_tag = None
+        self.best_ddim_checkpoint_path = os.path.join(
+            self.output_dir, 'checkpoints', 'best_ddim.ckpt')
 
     def _reset_policy_optimizer(self, lr: Optional[float] = None) -> None:
         """
@@ -212,6 +298,12 @@ class RL100Trainer:
         )
         return rl_lr
 
+    def _uses_ppo_backend(self) -> bool:
+        return self.offline_policy_backend == 'ppo'
+
+    def _uses_qam_backend(self) -> bool:
+        return self.offline_policy_backend == 'qam'
+
     def _encode_obs_representations(
         self,
         obs_dict: Dict[str, torch.Tensor],
@@ -219,8 +311,6 @@ class RL100Trainer:
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         policy = self.policy if policy is None else policy
         nobs = policy.normalizer.normalize(obs_dict)
-        if not policy.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
         this_nobs = dict_apply(
             nobs,
             lambda x: x[:, :policy.n_obs_steps, ...].reshape(-1, *x.shape[2:])
@@ -258,22 +348,45 @@ class RL100Trainer:
     def _extract_chunk_action(self, action_trajectory: torch.Tensor) -> torch.Tensor:
         return self.policy.extract_action_chunk(action_trajectory)
 
-    def _normalize_chunk_action(self, action_trajectory: torch.Tensor) -> torch.Tensor:
+    def _normalize_chunk_action(
+        self,
+        action_trajectory: torch.Tensor,
+        executed_action_steps: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         chunk_action = self._extract_chunk_action(action_trajectory)
-        return self.policy.normalizer['action'].normalize(chunk_action)
+        normalized_chunk = self.policy.normalizer['action'].normalize(chunk_action)
+        return self.policy.mask_action_chunk(
+            normalized_chunk,
+            executed_action_steps=executed_action_steps,
+        )
 
-    def _flatten_normalized_chunk_action(self, action_trajectory: torch.Tensor) -> torch.Tensor:
-        normalized_chunk = self._normalize_chunk_action(action_trajectory)
+    def _flatten_normalized_chunk_action(
+        self,
+        action_trajectory: torch.Tensor,
+        executed_action_steps: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        normalized_chunk = self._normalize_chunk_action(
+            action_trajectory,
+            executed_action_steps=executed_action_steps,
+        )
         return normalized_chunk.reshape(normalized_chunk.shape[0], -1)
 
     def get_runtime_policy(self, mode: str = 'ddim', use_ema: bool = False) -> BasePolicy:
         teacher_policy = self.ema_policy if use_ema and self.ema_policy is not None else self.policy
         mode = str(mode).lower()
         if mode == 'cm':
+            if not self._is_cm_policy_enabled():
+                raise ValueError(
+                    f"Runtime policy 'cm' is disabled for task.execution.mode={self._task_execution_mode()}."
+                )
+            if self.consistency_model is None:
+                raise ValueError("Consistency model is unavailable for the current training backend.")
             runtime_policy = ConsistencyPolicyWrapper(teacher_policy=teacher_policy, consistency_model=self.consistency_model)
             runtime_policy.to(self.device)
             runtime_policy.eval()
             return runtime_policy
+        if mode in {'policy', 'base', 'flow', 'fm'}:
+            mode = 'ddim'
         if mode != 'ddim':
             raise ValueError(f"Unsupported runtime policy mode: {mode}")
         teacher_policy.eval()
@@ -284,6 +397,167 @@ class RL100Trainer:
         if self._output_dir is not None:
             return self._output_dir
         return os.getcwd()
+
+    def _task_execution_mode(self) -> str:
+        return get_task_execution_mode(self.config)
+
+    def _is_eval_enabled(self) -> bool:
+        return is_eval_enabled(self.config)
+
+    def _is_amq_enabled(self) -> bool:
+        return is_amq_enabled(self.config)
+
+    def _is_cm_policy_enabled(self) -> bool:
+        return is_cm_policy_enabled(self.config)
+
+    def _extract_eval_score(self, metrics: Optional[Dict]) -> Optional[float]:
+        if not metrics:
+            return None
+        for key in ('test_mean_score', 'mean_success_rates'):
+            value = metrics.get(key, None)
+            if value is None:
+                continue
+            try:
+                score = float(value)
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(score):
+                return score
+        return None
+
+    def _stack_obs_np_dicts(self, obs_dicts: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray]:
+        if not obs_dicts:
+            return {}
+        obs_keys = list(obs_dicts[0].keys())
+        return {
+            key: np.stack([np.asarray(obs[key]) for obs in obs_dicts], axis=0)
+            for key in obs_keys
+        }
+
+    def _obs_np_to_torch(self, obs_batch: Dict[str, np.ndarray]) -> Dict[str, torch.Tensor]:
+        return {
+            key: torch.from_numpy(np.asarray(value)).to(self.device, non_blocking=True)
+            for key, value in obs_batch.items()
+        }
+
+    def _maybe_update_best_ddim_checkpoint(self, metrics: Optional[Dict], tag: str) -> bool:
+        score = self._extract_eval_score(metrics)
+        if score is None:
+            return False
+        if score <= self.best_ddim_score:
+            return False
+
+        prev_score = self.best_ddim_score
+        self.best_ddim_score = score
+        self.best_ddim_source_tag = str(tag)
+        self.save_checkpoint(tag='best_ddim')
+        self.best_ddim_checkpoint_path = os.path.join(
+            self.output_dir, 'checkpoints', 'best_ddim.ckpt')
+
+        if np.isfinite(prev_score):
+            cprint(
+                f"[BestDDIM] Updated best DDIM checkpoint from {prev_score:.4f} to {score:.4f} "
+                f"at {self.best_ddim_source_tag}.",
+                "green",
+            )
+        else:
+            cprint(
+                f"[BestDDIM] Recorded initial best DDIM checkpoint: {score:.4f} "
+                f"at {self.best_ddim_source_tag}.",
+                "green",
+            )
+        return True
+
+    def _evaluate_current_ddim(
+        self,
+        env_runner: Optional[BaseRunner],
+        use_ema: Optional[bool] = None,
+    ) -> Optional[Dict]:
+        if env_runner is None:
+            return None
+        if not self._is_eval_enabled():
+            return None
+        eval_use_ema = (
+            bool(getattr(self.config.runtime, 'final_eval_use_ema', False))
+            if use_ema is None else bool(use_ema)
+        )
+        eval_policy = self.get_runtime_policy(mode='ddim', use_ema=eval_use_ema)
+        eval_policy.eval()
+        with torch.no_grad():
+            metrics = env_runner.run(eval_policy)
+        return metrics
+
+    def _select_verified_final_ddim_checkpoint(
+        self,
+        env_runner: Optional[BaseRunner],
+    ) -> None:
+        """
+        Verify that the checkpoint recorded as "best" still outperforms the
+        current in-memory policy under the deterministic evaluation runner.
+
+        This guards against stale bookkeeping or save/load inconsistencies:
+        the final checkpoint should be selected by the score we can reproduce
+        right now, not only by the score that was logged earlier.
+        """
+        if env_runner is None:
+            return
+        if not self._is_eval_enabled():
+            return
+
+        restore_best_ddim = bool(
+            getattr(self.config.runtime, 'restore_best_ddim_before_final_eval', True)
+        )
+        if not restore_best_ddim:
+            return
+        if self.best_ddim_source_tag is None:
+            return
+        if not os.path.isfile(self.best_ddim_checkpoint_path):
+            return
+
+        last_checkpoint_path = os.path.join(self.output_dir, 'checkpoints', 'last.ckpt')
+
+        self.save_checkpoint(tag='last')
+        current_metrics = self._evaluate_current_ddim(env_runner)
+        current_score = self._extract_eval_score(current_metrics)
+
+        cprint(
+            f"[BestDDIM] Verifying recorded best checkpoint from {self.best_ddim_source_tag} "
+            f"(tracked score={self.best_ddim_score:.4f}).",
+            "yellow",
+        )
+        self.load_checkpoint(self.best_ddim_checkpoint_path, load_rl_state=True)
+        best_metrics = self._evaluate_current_ddim(env_runner)
+        best_score = self._extract_eval_score(best_metrics)
+
+        if current_score is not None:
+            cprint(f"[BestDDIM] Current final-state DDIM score: {current_score:.4f}", "yellow")
+        if best_score is not None:
+            cprint(f"[BestDDIM] Restored best.ckpt DDIM score: {best_score:.4f}", "yellow")
+
+        # Keep the restored checkpoint only when it actually reproduces a better
+        # deterministic evaluation score than the current final state.
+        if (
+            current_score is not None
+            and best_score is not None
+            and best_score + 1e-8 < current_score
+        ):
+            cprint(
+                f"[BestDDIM] Restored checkpoint underperformed the current final state "
+                f"({best_score:.4f} < {current_score:.4f}); keeping last.ckpt instead.",
+                "yellow",
+            )
+            self.load_checkpoint(last_checkpoint_path, load_rl_state=True)
+            return
+
+        if best_score is None and current_score is not None:
+            cprint(
+                "[BestDDIM] Restored checkpoint could not be re-scored; keeping last.ckpt instead.",
+                "yellow",
+            )
+            self.load_checkpoint(last_checkpoint_path, load_rl_state=True)
+            return
+
+        cprint("[BestDDIM] Using restored best checkpoint for final save/eval.", "yellow")
 
     def _save_loss_curve_plot(
         self,
@@ -378,7 +652,8 @@ class RL100Trainer:
         num_epochs: int,
         val_dataset: Optional[BaseDataset] = None,
         env_runner: Optional[BaseRunner] = None,
-        plot_tag: str = "il"
+        plot_tag: str = "il",
+        resume_state: bool = False,
     ) -> Dict:
         """
         Phase 1: Train with behavior cloning (standard DP3 training).
@@ -434,12 +709,47 @@ class RL100Trainer:
             self.ema_policy.set_normalizer(normalizer)
             self.ema_policy.to(self.device)
 
-        self._prepare_policy_optimizer_for_bc()
+        start_epoch = 0
+        if resume_state:
+            if self.epoch > 0:
+                start_epoch = int(self.epoch)
+            elif len(train_dataloader) > 0 and self.global_step > 0:
+                start_epoch = int(self.global_step // len(train_dataloader))
+                if start_epoch > 0:
+                    cprint(
+                        f"[IL] Inferred completed epochs from global_step: {start_epoch}",
+                        "yellow",
+                    )
+            start_epoch = max(0, min(int(start_epoch), int(num_epochs)))
+            cprint(
+                f"[IL] Resuming IL from epoch {start_epoch}/{num_epochs} with restored optimizer state.",
+                "yellow",
+            )
+        else:
+            self._prepare_policy_optimizer_for_bc()
+            self.epoch = 0
 
         # Training loop
         il_loss_per_epoch = []
-        for epoch in range(num_epochs):
+        last_eval_metrics = None
+        safe_tag = str(plot_tag).replace('/', '_').replace(' ', '_')
+        num_train_batches = len(train_dataloader)
+        console_log_every = int(getattr(config.training, 'console_log_every', 100))
+        cprint(
+            f"[IL] DataLoader ready: samples={len(dataset)}, batch_size={config.dataloader.batch_size}, "
+            f"num_batches/epoch={num_train_batches}, num_workers={config.dataloader.num_workers}",
+            "cyan",
+        )
+        if console_log_every > 0:
+            cprint(f"[IL] Console progress every {console_log_every} batches.", "cyan")
+        if start_epoch >= num_epochs:
+            cprint(
+                f"[IL] Requested IL epochs already completed ({start_epoch}/{num_epochs}); skipping BC loop.",
+                "yellow",
+            )
+        for epoch in range(start_epoch, num_epochs):
             epoch_losses = []
+            epoch_start_time = time.time()
 
             for batch_idx, batch in enumerate(train_dataloader):
                 # Move to device
@@ -460,6 +770,26 @@ class RL100Trainer:
 
                 epoch_losses.append(loss.item())
                 self.global_step += 1
+
+                if (
+                    console_log_every > 0
+                    and (
+                        batch_idx == 0
+                        or (batch_idx + 1) == num_train_batches
+                        or (batch_idx + 1) % console_log_every == 0
+                    )
+                ):
+                    elapsed = time.time() - epoch_start_time
+                    batches_done = batch_idx + 1
+                    batches_per_sec = batches_done / max(elapsed, 1e-6)
+                    eta_sec = (num_train_batches - batches_done) / max(batches_per_sec, 1e-6)
+                    cprint(
+                        f"[IL] Epoch {epoch + 1}/{num_epochs} "
+                        f"Batch {batches_done}/{num_train_batches} "
+                        f"Loss: {loss.item():.4f} "
+                        f"elapsed={elapsed:.1f}s eta={eta_sec:.1f}s",
+                        "green",
+                    )
 
                 # Log
                 if self.global_step % config.training.log_every == 0 and config.logging.use_wandb:
@@ -497,27 +827,41 @@ class RL100Trainer:
                 }, step=self.global_step)
 
             # Evaluate
-            if env_runner is not None and (epoch + 1) % config.training.eval_every == 0:
+            if (
+                env_runner is not None
+                and self._is_eval_enabled()
+                and (epoch + 1) % config.training.eval_every == 0
+            ):
                 eval_policy = self.ema_policy if self.ema_policy else self.policy
                 eval_policy.eval()
                 with torch.no_grad():
                     metrics = env_runner.run(eval_policy)
+                last_eval_metrics = metrics
                 cprint(f"[IL] Eval - Success Rate: {metrics.get('mean_success_rates', 0):.3f}", "green")
                 if config.logging.use_wandb:
                     wandb.log({f'il/eval_{k}': v for k, v in metrics.items()}, step=self.global_step)
                 eval_policy.train()
 
-        safe_tag = str(plot_tag).replace('/', '_').replace(' ', '_')
-        il_plot_path = self._save_loss_curve_plot(
-            loss_history=il_loss_per_epoch,
-            title=f"IL Loss ({safe_tag})",
-            ylabel="IL Loss",
-            filename=f"il_loss_{safe_tag}.png"
-        )
-        if config.logging.use_wandb and il_plot_path is not None:
-            wandb.log({f'il/loss_curve_{safe_tag}': wandb.Image(il_plot_path)}, step=self.global_step)
+            checkpoint_every = int(getattr(config.training, 'checkpoint_every', 0))
+            if checkpoint_every > 0 and (epoch + 1) % checkpoint_every == 0:
+                self.save_checkpoint(tag=f'{safe_tag}_epoch_{epoch + 1}')
+            self.epoch = epoch + 1
 
-        return {'final_loss': avg_loss}
+        avg_loss = float(np.mean(il_loss_per_epoch)) if il_loss_per_epoch else float('nan')
+        if il_loss_per_epoch:
+            il_plot_path = self._save_loss_curve_plot(
+                loss_history=il_loss_per_epoch,
+                title=f"IL Loss ({safe_tag})",
+                ylabel="IL Loss",
+                filename=f"il_loss_{safe_tag}.png"
+            )
+            if config.logging.use_wandb and il_plot_path is not None:
+                wandb.log({f'il/loss_curve_{safe_tag}': wandb.Image(il_plot_path)}, step=self.global_step)
+
+        return {
+            'final_loss': avg_loss,
+            'eval_metrics': last_eval_metrics,
+        }
 
     def train_transition_model(
         self,
@@ -551,6 +895,8 @@ class RL100Trainer:
             num_workers=self.config.dataloader.num_workers,
             max_epochs=max_epochs,
             max_epochs_since_update=max_epochs_since_update,
+            holdout_ratio=float(getattr(getattr(self.config, 'transition', None), 'holdout_ratio', 0.2)),
+            logvar_loss_coef=float(getattr(getattr(self.config, 'transition', None), 'logvar_loss_coef', 0.01)),
         )
         val_loss = float(transition_metrics['final_val_loss'])
         train_loss_history = transition_metrics.get('train_loss_history', [])
@@ -589,7 +935,8 @@ class RL100Trainer:
     def train_iql_critics(
         self,
         dataset: BaseDataset,
-        num_epochs: int
+        num_epochs: Optional[int] = None,
+        num_steps: Optional[int] = None,
     ) -> Dict:
         """
         Phase 2a: Train IQL critics (Q and V networks).
@@ -603,7 +950,8 @@ class RL100Trainer:
 
         Args:
             dataset: Dataset with (s, a, r, s', done)
-            num_epochs: Number of training epochs
+            num_epochs: Fallback number of training epochs
+            num_steps: Fixed number of critic updates (preferred when set)
 
         Returns:
             metrics: Dictionary with training metrics
@@ -628,95 +976,123 @@ class RL100Trainer:
             pin_memory=True
         )
 
+        def _critic_update(batch) -> Tuple[float, Optional[float]]:
+            batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
+
+            obs_dict = batch['obs']
+            with torch.no_grad():
+                obs_features = self._encode_obs_features(obs_dict)
+
+            # The full executed action chunk is one MDP decision.
+            naction = self._flatten_normalized_chunk_action(
+                batch['action'],
+                executed_action_steps=batch.get('executed_action_steps', None),
+            )
+
+            v_loss, v_info = self.critics.compute_v_loss(obs_features, naction)
+
+            self.v_optimizer.zero_grad()
+            v_loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                self.critics.v_network.parameters(), max_norm=10.0)
+            self.v_optimizer.step()
+
+            q_loss_item = None
+            if 'reward' in batch and 'next_obs' in batch:
+                reward = batch['reward']
+                if reward.dim() == 1:
+                    reward = reward.unsqueeze(-1)
+                reward_scale = float(getattr(config.critics, 'reward_scale', 10.0))
+                reward = reward / reward_scale
+                done = batch.get('done', torch.zeros_like(reward))
+                if done.dim() == 1:
+                    done = done.unsqueeze(-1)
+
+                with torch.no_grad():
+                    next_obs_features = self._encode_obs_features(batch['next_obs'])
+
+                q_loss, q_info = self.critics.compute_q_loss(
+                    obs_features, naction, reward, next_obs_features, done
+                )
+
+                self.q_optimizer.zero_grad()
+                q_loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    self.critics.q_network.parameters(), max_norm=10.0)
+                self.q_optimizer.step()
+
+                q_loss_item = float(q_loss.item())
+                self.critics.update_target_network(tau=config.critics.target_update_tau)
+
+                if self.global_step % config.training.log_every == 0 and config.logging.use_wandb:
+                    wandb.log({
+                        'iql/v_loss': float(v_loss.item()),
+                        'iql/q_loss': q_loss_item,
+                        **{f'iql/{k}': v for k, v in v_info.items()},
+                        **{f'iql/{k}': v for k, v in q_info.items()}
+                    }, step=self.global_step)
+
+            self.global_step += 1
+            return float(v_loss.item()), q_loss_item
+
         q_loss_per_epoch = []
         v_loss_per_epoch = []
-        for epoch in range(num_epochs):
-            v_losses = []
-            q_losses = []
+        all_v_losses = []
+        all_q_losses = []
 
-            for batch_idx, batch in enumerate(train_dataloader):
-                batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
+        if num_steps is not None and int(num_steps) > 0:
+            num_steps = int(num_steps)
+            train_iterator = iter(train_dataloader)
+            steps_per_bucket = max(1, len(train_dataloader))
+            bucket_v_losses = []
+            bucket_q_losses = []
 
-                # Extract data
-                obs_dict = batch['obs']
+            for step in range(num_steps):
+                try:
+                    batch = next(train_iterator)
+                except StopIteration:
+                    train_iterator = iter(train_dataloader)
+                    batch = next(train_iterator)
 
-                # Encode observations to get features
-                with torch.no_grad():
-                    obs_features = self._encode_obs_features(obs_dict)
+                v_loss_item, q_loss_item = _critic_update(batch)
+                all_v_losses.append(v_loss_item)
+                bucket_v_losses.append(v_loss_item)
+                if q_loss_item is not None:
+                    all_q_losses.append(q_loss_item)
+                    bucket_q_losses.append(q_loss_item)
 
-                # Normalize chunk action: the full executed action chunk is one MDP decision.
-                naction = self._flatten_normalized_chunk_action(batch['action'])
+                should_flush = ((step + 1) % steps_per_bucket == 0) or (step + 1 == num_steps)
+                if should_flush:
+                    v_loss_avg = float(np.mean(bucket_v_losses)) if bucket_v_losses else 0.0
+                    q_loss_avg = float(np.mean(bucket_q_losses)) if bucket_q_losses else 0.0
+                    cprint(f"[IQL] Step {step + 1}/{num_steps}, "
+                           f"V Loss: {v_loss_avg:.4f}, "
+                           f"Q Loss: {q_loss_avg:.4f}", "green")
+                    v_loss_per_epoch.append(v_loss_avg)
+                    q_loss_per_epoch.append(q_loss_avg)
+                    bucket_v_losses = []
+                    bucket_q_losses = []
+        else:
+            num_epochs = int(num_epochs if num_epochs is not None else 0)
+            for epoch in range(num_epochs):
+                epoch_v_losses = []
+                epoch_q_losses = []
 
-                # 1. Update V network
-                v_loss, v_info = self.critics.compute_v_loss(obs_features, naction)
+                for batch in train_dataloader:
+                    v_loss_item, q_loss_item = _critic_update(batch)
+                    all_v_losses.append(v_loss_item)
+                    epoch_v_losses.append(v_loss_item)
+                    if q_loss_item is not None:
+                        all_q_losses.append(q_loss_item)
+                        epoch_q_losses.append(q_loss_item)
 
-                self.v_optimizer.zero_grad()
-                v_loss.backward()
-                torch.nn.utils.clip_grad_norm_(
-                    self.critics.v_network.parameters(), max_norm=10.0)
-                self.v_optimizer.step()
-
-                v_losses.append(v_loss.item())
-
-                # 2. Update Q network using actual next_obs from dataset.
-                # Encoding the real next observation is more reliable than the
-                # transition model, which can fail to generalise when new collected
-                # data has a different distribution from the expert demos.
-                if 'reward' in batch and 'next_obs' in batch:
-                    reward = batch['reward']
-                    if reward.dim() == 1:
-                        reward = reward.unsqueeze(-1)  # [B] -> [B, 1]
-                    # Optional reward normalization before Bellman backup.
-                    # This is only needed for tasks that truly provide large-magnitude
-                    # dense rewards. In the current MetaWorld sparse setup the default
-                    # reward_scale is 1.0, so no extra scaling is applied.
-                    reward_scale = float(getattr(config.critics, 'reward_scale', 10.0))
-                    reward = reward / reward_scale
-                    done = batch.get('done', torch.zeros_like(reward))
-                    if done.dim() == 1:
-                        done = done.unsqueeze(-1)
-
-                    B = obs_features.shape[0]
-                    # Encode actual next obs (at t + n_action_steps) from dataset
-                    with torch.no_grad():
-                        next_obs_raw = batch['next_obs']  # nested dict, already on device
-                        next_obs_features = self._encode_obs_features(next_obs_raw)
-
-                    q_loss, q_info = self.critics.compute_q_loss(
-                        obs_features, naction, reward, next_obs_features, done
-                    )
-
-                    self.q_optimizer.zero_grad()
-                    q_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(
-                        self.critics.q_network.parameters(), max_norm=10.0)
-                    self.q_optimizer.step()
-
-                    q_losses.append(q_loss.item())
-
-                    # Update target network
-                    self.critics.update_target_network(tau=config.critics.target_update_tau)
-
-                    # Log
-                    if self.global_step % config.training.log_every == 0 and config.logging.use_wandb:
-                        wandb.log({
-                            'iql/v_loss': v_loss.item(),
-                            'iql/q_loss': q_loss.item(),
-                            **{f'iql/{k}': v for k, v in v_info.items()},
-                            **{f'iql/{k}': v for k, v in q_info.items()}
-                        }, step=self.global_step)
-
-                self.global_step += 1
-
-            v_loss_avg = np.mean(v_losses) if v_losses else 0.0
-            q_loss_avg = np.mean(q_losses) if q_losses else 0.0
-
-            # 2. 使用格式化打印
-            cprint(f"[IQL] Epoch {epoch}/{num_epochs}, "
-                   f"V Loss: {float(v_loss_avg):.4f}, "
-                   f"Q Loss: {float(q_loss_avg):.4f}", "green")
-            v_loss_per_epoch.append(float(v_loss_avg))
-            q_loss_per_epoch.append(float(q_loss_avg))
+                v_loss_avg = float(np.mean(epoch_v_losses)) if epoch_v_losses else 0.0
+                q_loss_avg = float(np.mean(epoch_q_losses)) if epoch_q_losses else 0.0
+                cprint(f"[IQL] Epoch {epoch}/{num_epochs}, "
+                       f"V Loss: {v_loss_avg:.4f}, "
+                       f"Q Loss: {q_loss_avg:.4f}", "green")
+                v_loss_per_epoch.append(v_loss_avg)
+                q_loss_per_epoch.append(q_loss_avg)
 
         q_loss_plot_path = self._save_loss_curve_plot(
             loss_history=q_loss_per_epoch,
@@ -746,7 +1122,457 @@ class RL100Trainer:
             param.requires_grad_(True)
         self.policy.train()
 
-        return {'v_loss': np.mean(v_losses), 'q_loss': np.mean(q_losses) if q_losses else 0}
+        return {
+            'v_loss': float(np.mean(all_v_losses)) if all_v_losses else 0.0,
+            'q_loss': float(np.mean(all_q_losses)) if all_q_losses else 0.0,
+        }
+
+    def _sample_policy_chunk_action_from_global_cond(
+        self,
+        global_cond: torch.Tensor,
+        obs_features: Optional[torch.Tensor] = None,
+        policy: Optional[BasePolicy] = None,
+        num_samples: int = 1,
+        use_target_critics: bool = True,
+    ) -> torch.Tensor:
+        policy = self.policy if policy is None else policy
+        num_samples = max(int(num_samples), 1)
+        clip_sampled_actions = bool(getattr(getattr(self.config, 'qam', None), 'clip_sampled_actions', True))
+
+        sampled_actions = []
+        sampled_scores = []
+        with torch.no_grad():
+            for _ in range(num_samples):
+                action_pred = policy.predict_action_from_global_cond(global_cond)
+                naction = policy.flatten_action_chunk(action_pred['naction_pred'])
+                if clip_sampled_actions:
+                    naction = naction.clamp(-1.0, 1.0)
+                sampled_actions.append(naction)
+                if obs_features is not None and self.qam_critics is not None:
+                    sampled_scores.append(
+                        self.qam_critics.get_pessimistic_q(
+                            obs_features,
+                            naction,
+                            use_target=use_target_critics,
+                        )
+                    )
+
+        if len(sampled_actions) == 1 or not sampled_scores:
+            return sampled_actions[0]
+
+        stacked_actions = torch.stack(sampled_actions, dim=0)
+        stacked_scores = torch.stack(sampled_scores, dim=0).squeeze(-1)
+        best_idx = stacked_scores.argmax(dim=0)
+        batch_indices = torch.arange(best_idx.shape[0], device=best_idx.device)
+        return stacked_actions[best_idx, batch_indices]
+
+    def _compute_qam_adjoint_matching_loss(
+        self,
+        global_cond: torch.Tensor,
+        obs_features: torch.Tensor,
+        behavior_policy: BasePolicy,
+        executed_action_steps: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Dict[str, float]]:
+        if self.qam_critics is None:
+            raise RuntimeError("QAM critic ensemble is not initialized.")
+        if not getattr(self.policy, 'is_flow_matching_policy', False):
+            raise RuntimeError("QAM actor optimization requires a flow-matching policy.")
+
+        qam_cfg = getattr(self.config, 'qam', OmegaConf.create())
+        flow_steps = int(getattr(qam_cfg, 'flow_steps', getattr(self.policy, 'flow_sampling_steps', 10)))
+        inv_temp = float(getattr(qam_cfg, 'inv_temp', 1.0))
+        use_target_grad = bool(getattr(qam_cfg, 'use_target_grad', True))
+        clip_adj = bool(getattr(qam_cfg, 'clip_adj', True))
+        clip_sampled_actions = bool(getattr(qam_cfg, 'clip_sampled_actions', True))
+
+        global_cond = global_cond.detach()
+        obs_features = obs_features.detach()
+
+        xs, ts, final_sample = self.policy.sample_qam_sde_trajectory_from_global_cond(
+            global_cond=global_cond,
+            flow_steps=flow_steps,
+        )
+
+        final_sample = final_sample.detach().requires_grad_(True)
+        final_action = self.policy.flatten_action_chunk(
+            final_sample,
+            executed_action_steps=executed_action_steps,
+        )
+        final_action_for_q = final_action.clamp(-1.0, 1.0) if clip_sampled_actions else final_action
+        q_values = self.qam_critics.get_mean_q(
+            obs_features,
+            final_action_for_q,
+            use_target=use_target_grad,
+        )
+        adj = -torch.autograd.grad(q_values.sum(), final_sample, create_graph=False)[0] * inv_temp
+        if clip_adj:
+            adj = adj.clamp(-1.0, 1.0)
+
+        pre_adj_info = {
+            'adj_max': float(adj.detach().abs().max().item()),
+            'adj_std': float(adj.detach().abs().std().item()),
+            'adj_mean': float(adj.detach().abs().mean().item()),
+        }
+
+        h = 1.0 / float(flow_steps)
+        adjs = []
+        for step_idx in reversed(range(flow_steps)):
+            x_step = xs[step_idx].detach().requires_grad_(True)
+            t_next = (ts[step_idx].detach() + h).clamp(min=h)
+            drift = 2.0 * behavior_policy.evaluate_flow_vector_field(
+                sample=x_step,
+                timestep=t_next,
+                global_cond=global_cond,
+            ) - x_step / t_next.view(-1, 1, 1)
+            vjp = torch.autograd.grad((drift * adj).sum(), x_step, create_graph=False)[0]
+            adj = (adj + h * vjp).detach()
+            adjs.append(adj)
+        adjs = torch.stack(list(reversed(adjs)), dim=0)
+
+        num_steps, batch_size = xs.shape[:2]
+        xs_flat = xs.reshape(num_steps * batch_size, *xs.shape[2:])
+        ts_flat = ts.reshape(num_steps * batch_size)
+        global_cond_flat = global_cond.unsqueeze(0).expand(
+            num_steps, *global_cond.shape
+        ).reshape(num_steps * batch_size, *global_cond.shape[1:])
+
+        vf_fine = self.policy.evaluate_flow_vector_field(
+            sample=xs_flat,
+            timestep=ts_flat,
+            global_cond=global_cond_flat,
+        ).reshape_as(xs)
+        with torch.no_grad():
+            vf_base = behavior_policy.evaluate_flow_vector_field(
+                sample=xs_flat,
+                timestep=ts_flat,
+                global_cond=global_cond_flat,
+            ).reshape_as(xs)
+
+        sigma = torch.sqrt(2.0 * (1.0 - ts + h) / (ts + h)).view(num_steps, batch_size, 1, 1)
+        residual = (vf_fine - vf_base) * 2.0 / sigma + sigma * adjs
+        adj_loss = torch.sum(residual ** 2, dim=[2, 3])
+        adj_loss = torch.mean(torch.sum(adj_loss, dim=0))
+
+        info = {
+            'adj_loss': float(adj_loss.item()),
+            **pre_adj_info,
+        }
+        return adj_loss, info
+
+    def train_qam_critics(
+        self,
+        dataset: BaseDataset,
+        num_epochs: Optional[int] = None,
+        num_steps: Optional[int] = None,
+    ) -> Dict:
+        cprint(f"\n[RL100Trainer] Phase 2a: Training QAM Critics (Iteration {self.offline_rl_iteration})", "cyan")
+
+        if self.qam_critics is None:
+            raise RuntimeError("QAM critic ensemble is not initialized.")
+
+        config = self.config
+        qam_cfg = getattr(config, 'qam', OmegaConf.create())
+
+        self.policy.eval()
+        for param in self.policy.parameters():
+            param.requires_grad_(False)
+
+        self.qam_critics.train()
+        train_dataloader = DataLoader(
+            dataset,
+            batch_size=config.dataloader.batch_size,
+            shuffle=True,
+            num_workers=config.dataloader.num_workers,
+            pin_memory=True,
+        )
+
+        def _critic_update(batch) -> float:
+            batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
+            obs_dict = batch['obs']
+
+            with torch.no_grad():
+                obs_features, _ = self._encode_obs_representations(obs_dict)
+                next_obs_features, next_global_cond = self._encode_obs_representations(batch['next_obs'])
+                next_action = self._sample_policy_chunk_action_from_global_cond(
+                    global_cond=next_global_cond,
+                    obs_features=next_obs_features,
+                    num_samples=int(getattr(qam_cfg, 'best_of_n', 1)),
+                    use_target_critics=True,
+                )
+
+            naction = self._flatten_normalized_chunk_action(
+                batch['action'],
+                executed_action_steps=batch.get('executed_action_steps', None),
+            )
+            reward = batch['reward']
+            if reward.dim() == 1:
+                reward = reward.unsqueeze(-1)
+            reward_scale = float(getattr(config.critics, 'reward_scale', 1.0))
+            reward = reward / reward_scale
+            done = batch.get('done', torch.zeros_like(reward))
+            if done.dim() == 1:
+                done = done.unsqueeze(-1)
+
+            q_loss, q_info = self.qam_critics.compute_q_loss(
+                obs=obs_features,
+                action=naction,
+                reward=reward,
+                next_obs=next_obs_features,
+                done=done,
+                next_action=next_action,
+            )
+
+            self.q_optimizer.zero_grad()
+            q_loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                self.qam_critics.q_networks.parameters(), max_norm=10.0)
+            self.q_optimizer.step()
+            self.qam_critics.update_target_network()
+
+            if self.global_step % config.training.log_every == 0 and config.logging.use_wandb:
+                wandb.log({
+                    'qam/critic_loss': float(q_loss.item()),
+                    **{f'qam/{k}': v for k, v in q_info.items()},
+                }, step=self.global_step)
+
+            self.global_step += 1
+            return float(q_loss.item())
+
+        q_loss_per_epoch = []
+        all_q_losses = []
+
+        if num_steps is not None and int(num_steps) > 0:
+            num_steps = int(num_steps)
+            train_iterator = iter(train_dataloader)
+            steps_per_bucket = max(1, len(train_dataloader))
+            bucket_q_losses = []
+
+            for step in range(num_steps):
+                try:
+                    batch = next(train_iterator)
+                except StopIteration:
+                    train_iterator = iter(train_dataloader)
+                    batch = next(train_iterator)
+
+                q_loss_item = _critic_update(batch)
+                all_q_losses.append(q_loss_item)
+                bucket_q_losses.append(q_loss_item)
+
+                should_flush = ((step + 1) % steps_per_bucket == 0) or (step + 1 == num_steps)
+                if should_flush:
+                    q_loss_avg = float(np.mean(bucket_q_losses)) if bucket_q_losses else 0.0
+                    cprint(f"[QAM] Critic Step {step + 1}/{num_steps}, Q Loss: {q_loss_avg:.4f}", "green")
+                    q_loss_per_epoch.append(q_loss_avg)
+                    bucket_q_losses = []
+        else:
+            num_epochs = int(num_epochs if num_epochs is not None else 0)
+            for epoch in range(num_epochs):
+                epoch_q_losses = []
+                for batch in train_dataloader:
+                    q_loss_item = _critic_update(batch)
+                    all_q_losses.append(q_loss_item)
+                    epoch_q_losses.append(q_loss_item)
+
+                q_loss_avg = float(np.mean(epoch_q_losses)) if epoch_q_losses else 0.0
+                cprint(f"[QAM] Critic Epoch {epoch}/{num_epochs}, Q Loss: {q_loss_avg:.4f}", "green")
+                q_loss_per_epoch.append(q_loss_avg)
+
+        q_loss_plot_path = self._save_loss_curve_plot(
+            loss_history=q_loss_per_epoch,
+            title=f"QAM Critic Loss (iter {int(self.offline_rl_iteration)})",
+            ylabel="Q Loss",
+            filename=f"qam_q_loss_iter_{int(self.offline_rl_iteration):02d}.png"
+        )
+        if self.config.logging.use_wandb and q_loss_plot_path is not None:
+            wandb.log({
+                'qam/q_loss_curve': wandb.Image(q_loss_plot_path),
+                'qam/iteration': int(self.offline_rl_iteration),
+            }, step=self.global_step)
+
+        for param in self.policy.parameters():
+            param.requires_grad_(True)
+        self.policy.train()
+
+        return {
+            'q_loss': float(np.mean(all_q_losses)) if all_q_losses else 0.0,
+        }
+
+    def offline_qam_optimize(
+        self,
+        dataset: BaseDataset,
+        num_epochs: Optional[int] = None,
+        num_steps: Optional[int] = None,
+    ) -> Dict:
+        cprint(f"\n[RL100Trainer] Phase 2b: Offline QAM Optimization (Iteration {self.offline_rl_iteration})", "cyan")
+
+        if self.qam_critics is None:
+            raise RuntimeError("QAM critic ensemble is not initialized.")
+        if not getattr(self.policy, 'is_flow_matching_policy', False):
+            raise RuntimeError("QAM optimization requires a flow-matching policy.")
+
+        config = self.config
+        qam_cfg = getattr(config, 'qam', OmegaConf.create())
+        bc_loss_weight = float(getattr(qam_cfg, 'bc_loss_weight', 1.0))
+        adj_loss_weight = float(getattr(qam_cfg, 'adj_loss_weight', 1.0))
+
+        self._prepare_policy_optimizer_for_rl()
+
+        behavior_policy = copy.deepcopy(self.policy)
+        behavior_policy.to(self.device)
+        behavior_policy.eval()
+        for param in behavior_policy.parameters():
+            param.requires_grad_(False)
+
+        for param in self.policy.obs_encoder.parameters():
+            param.requires_grad_(False)
+
+        self.policy.train()
+        self.qam_critics.eval()
+
+        train_dataloader = DataLoader(
+            dataset,
+            batch_size=config.dataloader.batch_size,
+            shuffle=True,
+            num_workers=config.dataloader.num_workers,
+            pin_memory=True,
+        )
+
+        actor_loss_history = []
+        bc_loss_history = []
+        adj_loss_history = []
+        grad_norm_history = []
+
+        def _actor_update(batch) -> Dict[str, float]:
+            batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
+            obs_dict = batch['obs']
+            executed_action_steps = batch.get('executed_action_steps', None)
+
+            with torch.no_grad():
+                obs_features, global_cond = self._encode_obs_representations(obs_dict)
+
+            bc_loss, bc_info = self.policy.compute_loss(batch)
+            adj_loss, adj_info = self._compute_qam_adjoint_matching_loss(
+                global_cond=global_cond,
+                obs_features=obs_features,
+                behavior_policy=behavior_policy,
+                executed_action_steps=executed_action_steps,
+            )
+            total_loss = bc_loss_weight * bc_loss + adj_loss_weight * adj_loss
+
+            self.policy_optimizer.zero_grad()
+            total_loss.backward()
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.policy.parameters(),
+                config.training.max_grad_norm,
+            )
+            self.policy_optimizer.step()
+
+            if self.ema_policy is not None:
+                self.ema.step(self.policy)
+
+            metrics = {
+                'actor_loss': float(total_loss.item()),
+                'bc_loss': float(bc_info.get('fm_loss', bc_info.get('bc_loss', bc_loss.item()))),
+                'adj_loss': float(adj_info['adj_loss']),
+                'grad_norm': float(grad_norm),
+                'adj_max': float(adj_info['adj_max']),
+                'adj_std': float(adj_info['adj_std']),
+                'adj_mean': float(adj_info['adj_mean']),
+            }
+            if config.logging.use_wandb and self.global_step % config.training.log_every == 0:
+                wandb.log({
+                    'qam/actor_loss': metrics['actor_loss'],
+                    'qam/bc_loss': metrics['bc_loss'],
+                    'qam/adj_loss': metrics['adj_loss'],
+                    'qam/grad_norm': metrics['grad_norm'],
+                    'qam/adj_max': metrics['adj_max'],
+                    'qam/adj_std': metrics['adj_std'],
+                    'qam/adj_mean': metrics['adj_mean'],
+                }, step=self.global_step)
+
+            self.global_step += 1
+            return metrics
+
+        if num_steps is not None and int(num_steps) > 0:
+            num_steps = int(num_steps)
+            train_iterator = iter(train_dataloader)
+            steps_per_bucket = max(1, len(train_dataloader))
+            bucket_metrics = []
+
+            for step in range(num_steps):
+                try:
+                    batch = next(train_iterator)
+                except StopIteration:
+                    train_iterator = iter(train_dataloader)
+                    batch = next(train_iterator)
+
+                metrics = _actor_update(batch)
+                bucket_metrics.append(metrics)
+                actor_loss_history.append(metrics['actor_loss'])
+                bc_loss_history.append(metrics['bc_loss'])
+                adj_loss_history.append(metrics['adj_loss'])
+                grad_norm_history.append(metrics['grad_norm'])
+
+                should_flush = ((step + 1) % steps_per_bucket == 0) or (step + 1 == num_steps)
+                if should_flush:
+                    summary = {
+                        'actor_loss': float(np.mean([m['actor_loss'] for m in bucket_metrics])),
+                        'bc_loss': float(np.mean([m['bc_loss'] for m in bucket_metrics])),
+                        'adj_loss': float(np.mean([m['adj_loss'] for m in bucket_metrics])),
+                        'grad_norm': float(np.mean([m['grad_norm'] for m in bucket_metrics])),
+                    }
+                    cprint(
+                        f"[QAM] Actor Step {step + 1}/{num_steps}, "
+                        f"Loss: {summary['actor_loss']:.4f}, "
+                        f"BC: {summary['bc_loss']:.4f}, "
+                        f"Adj: {summary['adj_loss']:.4f}, "
+                        f"GradNorm: {summary['grad_norm']:.4f}",
+                        "green",
+                    )
+                    bucket_metrics = []
+        else:
+            num_epochs = int(num_epochs if num_epochs is not None else 0)
+            for epoch in range(num_epochs):
+                epoch_metrics = []
+                for batch in train_dataloader:
+                    metrics = _actor_update(batch)
+                    epoch_metrics.append(metrics)
+                    actor_loss_history.append(metrics['actor_loss'])
+                    bc_loss_history.append(metrics['bc_loss'])
+                    adj_loss_history.append(metrics['adj_loss'])
+                    grad_norm_history.append(metrics['grad_norm'])
+
+                if epoch_metrics:
+                    cprint(
+                        f"[QAM] Actor Epoch {epoch}/{num_epochs}, "
+                        f"Loss: {np.mean([m['actor_loss'] for m in epoch_metrics]):.4f}, "
+                        f"BC: {np.mean([m['bc_loss'] for m in epoch_metrics]):.4f}, "
+                        f"Adj: {np.mean([m['adj_loss'] for m in epoch_metrics]):.4f}, "
+                        f"GradNorm: {np.mean([m['grad_norm'] for m in epoch_metrics]):.4f}",
+                        "green",
+                    )
+
+        for param in self.policy.obs_encoder.parameters():
+            param.requires_grad_(True)
+
+        actor_loss_plot_path = self._save_loss_curve_plot(
+            loss_history=actor_loss_history,
+            title=f"QAM Actor Loss (iter {int(self.offline_rl_iteration)})",
+            ylabel="Actor Loss",
+            filename=f"qam_actor_loss_iter_{int(self.offline_rl_iteration):02d}.png"
+        )
+        if config.logging.use_wandb and actor_loss_plot_path is not None:
+            wandb.log({
+                'qam/actor_loss_curve': wandb.Image(actor_loss_plot_path),
+                'qam/iteration': int(self.offline_rl_iteration),
+            }, step=self.global_step)
+
+        return {
+            'actor_loss': float(np.mean(actor_loss_history)) if actor_loss_history else 0.0,
+            'bc_loss': float(np.mean(bc_loss_history)) if bc_loss_history else 0.0,
+            'adj_loss': float(np.mean(adj_loss_history)) if adj_loss_history else 0.0,
+            'grad_norm': float(np.mean(grad_norm_history)) if grad_norm_history else 0.0,
+        }
 
     def _relabel_demo_rewards(self, dataset: BaseDataset) -> None:
         """
@@ -785,8 +1611,12 @@ class RL100Trainer:
                 reward_array[end - 1] = 1.0
                 done_array[end - 1] = 1.0
 
-        rb.data.create_dataset('reward', data=reward_array, overwrite=True)
-        rb.data.create_dataset('done',   data=done_array,   overwrite=True)
+        if hasattr(rb.data, 'create_dataset'):
+            rb.data.create_dataset('reward', data=reward_array, overwrite=True)
+            rb.data.create_dataset('done',   data=done_array,   overwrite=True)
+        else:
+            rb.data['reward'] = reward_array
+            rb.data['done'] = done_array
 
         dataset.has_rl_data = True
 
@@ -808,7 +1638,16 @@ class RL100Trainer:
         num_batches: int,
         eval_seed: Optional[int] = None,
     ) -> List[torch.Tensor]:
-        """Prepare a fixed set of initial states for AM-Q evaluation."""
+        """
+        Prepare a fixed set of episode-start states for AM-Q evaluation.
+
+        RL-100's AM-Q gate is intended to compare policies from the initial
+        state distribution. Sampling arbitrary replay-buffer decision points
+        dilutes early-horizon policy improvements, especially on sparse-reward
+        tasks. When the dataset exposes episode boundaries, build the AM-Q
+        batches from episode-start decision windows only; otherwise fall back to
+        the generic replay-sample path.
+        """
         if "cross_attention" in getattr(self.policy, 'condition_type', ''):
             raise NotImplementedError(
                 "AM-Q feature-space rollout currently supports film-style conditioning only."
@@ -818,6 +1657,101 @@ class RL100Trainer:
 
         ope_cfg = getattr(self.config, 'ope', None)
         shuffle_batches = bool(getattr(ope_cfg, 'shuffle_batches', True))
+        feature_batches = []
+        batch_size = int(self.config.dataloader.batch_size)
+        rng = np.random.default_rng(int(eval_seed)) if eval_seed is not None else np.random.default_rng()
+
+        can_use_episode_starts = all(
+            hasattr(dataset, attr)
+            for attr in ('episode_starts', 'episode_ends', 'replay_buffer')
+        ) and (
+            hasattr(dataset, 'build_obs_window_dict')
+            or hasattr(dataset, '_build_obs_window')
+        )
+
+        if can_use_episode_starts:
+            n_episodes = int(dataset.replay_buffer.n_episodes)
+            episode_mask = np.asarray(
+                getattr(dataset, 'train_mask', np.ones(n_episodes, dtype=bool)),
+                dtype=bool,
+            )
+            if len(episode_mask) != n_episodes:
+                episode_mask = np.ones(n_episodes, dtype=bool)
+            candidate_episode_indices = np.flatnonzero(episode_mask)
+            if candidate_episode_indices.size == 0:
+                candidate_episode_indices = np.arange(n_episodes, dtype=np.int64)
+
+            total_required = max(int(num_batches), 0) * batch_size
+            if total_required > 0 and candidate_episode_indices.size > 0:
+                episode_schedule = []
+                while len(episode_schedule) < total_required:
+                    episode_chunk = candidate_episode_indices.copy()
+                    if shuffle_batches and episode_chunk.size > 1:
+                        rng.shuffle(episode_chunk)
+                    episode_schedule.extend(episode_chunk.tolist())
+                episode_schedule = episode_schedule[:total_required]
+
+                cprint(
+                    f"[OPE] AM-Q eval uses episode-start states: "
+                    f"{candidate_episode_indices.size} unique episodes, "
+                    f"{num_batches} batch(es) x {batch_size}.",
+                    "cyan",
+                )
+
+                with torch.no_grad():
+                    for batch_idx in range(int(num_batches)):
+                        start = batch_idx * batch_size
+                        end = start + batch_size
+                        batch_episode_indices = episode_schedule[start:end]
+                        if not batch_episode_indices:
+                            break
+
+                        obs_windows = []
+                        executed_action_steps = []
+
+                        for episode_idx in batch_episode_indices:
+                            episode_idx = int(episode_idx)
+                            episode_start = int(dataset.episode_starts[episode_idx])
+                            episode_end = int(dataset.episode_ends[episode_idx])
+
+                            if hasattr(dataset, 'build_obs_window_dict'):
+                                obs_window = dataset.build_obs_window_dict(
+                                    decision_start_idx=episode_start,
+                                    episode_start=episode_start,
+                                    episode_end=episode_end,
+                                )
+                            else:
+                                state_window, pc_window = dataset._build_obs_window(
+                                    decision_start_idx=episode_start,
+                                    episode_start=episode_start,
+                                    episode_end=episode_end,
+                                )
+                                obs_window = {
+                                    'agent_pos': state_window.astype(np.float32, copy=False),
+                                    'point_cloud': pc_window.astype(np.float32, copy=False),
+                                }
+                            obs_windows.append(obs_window)
+
+                            chunk_buffer_end = min(
+                                episode_start + int(getattr(dataset, 'n_action_steps', self.policy.n_action_steps)),
+                                episode_end,
+                            )
+                            executed_action_steps.append(
+                                max(int(chunk_buffer_end - episode_start), 1)
+                            )
+
+                        obs_batch = self._obs_np_to_torch(self._stack_obs_np_dicts(obs_windows))
+                        obs_features = self._encode_obs_features(obs_batch)
+                        feature_batches.append({
+                            'obs_features': obs_features.detach().cpu(),
+                            'executed_action_steps': torch.as_tensor(
+                                executed_action_steps,
+                                dtype=torch.long,
+                            ),
+                        })
+
+                return feature_batches
+
         data_generator = None
         if eval_seed is not None:
             data_generator = torch.Generator()
@@ -825,21 +1759,27 @@ class RL100Trainer:
 
         loader = _DL(
             dataset,
-            batch_size=self.config.dataloader.batch_size,
+            batch_size=batch_size,
             shuffle=shuffle_batches,
             num_workers=0,
             pin_memory=True,
             generator=data_generator,
         )
 
-        feature_batches = []
+        cprint("[OPE] Dataset does not expose episode starts; falling back to replay-sampled AM-Q states.", "yellow")
         with torch.no_grad():
             for batch_idx, batch in enumerate(loader):
                 if batch_idx >= num_batches:
                     break
                 batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
                 obs_features = self._encode_obs_features(batch['obs'])
-                feature_batches.append(obs_features.detach().cpu())
+                feature_batches.append({
+                    'obs_features': obs_features.detach().cpu(),
+                    'executed_action_steps': (
+                        batch['executed_action_steps'].detach().cpu()
+                        if 'executed_action_steps' in batch else None
+                    ),
+                })
 
         return feature_batches
 
@@ -908,30 +1848,66 @@ class RL100Trainer:
             )
 
         with torch.no_grad():
-            for batch_idx, init_features in enumerate(eval_features):
+            for batch_idx, feature_batch in enumerate(eval_features):
+                initial_executed_action_steps = None
+                if isinstance(feature_batch, dict):
+                    init_features = feature_batch['obs_features']
+                    initial_executed_action_steps = feature_batch.get('executed_action_steps', None)
+                else:
+                    init_features = feature_batch
                 obs_features = init_features.to(self.device, non_blocking=True)
                 # H-step rollout
                 batch_q_sum = torch.zeros(obs_features.shape[0], 1, device=self.device)
                 cur_features = obs_features
 
                 for h in range(rollout_horizon):
-                    initial_noise = None
+                    current_executed_action_steps = None
+                    if h == 0 and initial_executed_action_steps is not None:
+                        current_executed_action_steps = initial_executed_action_steps.to(
+                            self.device, non_blocking=True)
+                    noise_seed = None
                     if use_common_random_numbers and eval_seed is not None:
                         noise_seed = int(eval_seed + batch_idx * 1009 + h * 104729)
-                        initial_noise = self._sample_amq_initial_noise(
-                            batch_size=cur_features.shape[0],
-                            policy=eval_policy,
-                            seed=noise_seed,
-                            dtype=cur_features.dtype,
-                        )
 
-                    action_pred = eval_policy.predict_action_from_global_cond(
-                        cur_features,
-                        initial_noise=initial_noise,
-                    )
-                    naction = eval_policy.normalizer['action'].normalize(
-                        action_pred['action']
-                    ).reshape(cur_features.shape[0], -1)
+                    # RL-100 PPO optimizes the stochastic DDIM sub-policy
+                    # induced by conditional_sample_with_trajectory(). Use the
+                    # same policy semantics for AM-Q whenever available.
+                    if hasattr(eval_policy, 'sample_for_ppo_from_global_cond') and hasattr(eval_policy, 'flatten_action_chunk'):
+                        noise_generator = None
+                        if noise_seed is not None:
+                            noise_generator = torch.Generator()
+                            noise_generator.manual_seed(int(noise_seed))
+                        nsample, _, _ = eval_policy.sample_for_ppo_from_global_cond(
+                            cur_features,
+                            generator=noise_generator,
+                            executed_action_steps=current_executed_action_steps,
+                        )
+                        naction = eval_policy.flatten_action_chunk(
+                            nsample,
+                            executed_action_steps=current_executed_action_steps,
+                        )
+                    else:
+                        initial_noise = None
+                        if noise_seed is not None:
+                            initial_noise = self._sample_amq_initial_noise(
+                                batch_size=cur_features.shape[0],
+                                policy=eval_policy,
+                                seed=noise_seed,
+                                dtype=cur_features.dtype,
+                            )
+                        action_pred = eval_policy.predict_action_from_global_cond(
+                            cur_features,
+                            initial_noise=initial_noise,
+                        )
+                        naction = eval_policy.normalizer['action'].normalize(
+                            action_pred['action']
+                        )
+                        if hasattr(eval_policy, 'mask_action_chunk'):
+                            naction = eval_policy.mask_action_chunk(
+                                naction,
+                                executed_action_steps=current_executed_action_steps,
+                            )
+                        naction = naction.reshape(cur_features.shape[0], -1)
 
                     # Paper Eq.20 sums Q-values along the imagined rollout directly.
                     # Do not apply an extra outer discount here because Q already
@@ -996,11 +1972,14 @@ class RL100Trainer:
                 batch = dict_apply(batch, lambda x: x.to(self.device, non_blocking=True))
                 obs_dict = batch['obs']
                 obs_features, global_cond = self._encode_obs_representations(obs_dict)
+                executed_action_steps = batch.get('executed_action_steps', None)
                 trajectory_old, log_probs_old = behavior_policy.sample_for_ppo(
-                    global_cond=global_cond
+                    global_cond=global_cond,
+                    executed_action_steps=executed_action_steps,
                 )
                 behavior_chunk_action = behavior_policy.flatten_action_chunk(
-                    trajectory_old[-1]
+                    trajectory_old[-1],
+                    executed_action_steps=executed_action_steps,
                 )
                 advantages = self.critics.compute_advantage(
                     obs_features,
@@ -1011,6 +1990,10 @@ class RL100Trainer:
                     'global_cond': global_cond.detach().cpu(),
                     'trajectory_old': [traj.detach().cpu() for traj in trajectory_old],
                     'log_probs_old': [log_prob.detach().cpu() for log_prob in log_probs_old],
+                    'executed_action_steps': (
+                        executed_action_steps.detach().cpu()
+                        if executed_action_steps is not None else None
+                    ),
                     'advantages_raw': advantages.detach().cpu(),
                 }
                 if need_obs_cache:
@@ -1054,7 +2037,8 @@ class RL100Trainer:
     def offline_rl_optimize(
         self,
         dataset: BaseDataset,
-        num_epochs: int
+        num_epochs: Optional[int] = None,
+        num_steps: Optional[int] = None,
     ) -> Dict:
         """
         Phase 2b: Optimize policy with PPO and consistency distillation.
@@ -1069,7 +2053,8 @@ class RL100Trainer:
 
         Args:
             dataset: Dataset with (s, a, r, s', done)
-            num_epochs: Number of training epochs
+            num_epochs: Fallback number of training epochs
+            num_steps: Fixed number of PPO updates (preferred when set)
 
         Returns:
             metrics: Dictionary with training metrics
@@ -1082,22 +2067,32 @@ class RL100Trainer:
         ope_rollout_horizon = int(getattr(ope_cfg, 'rollout_horizon', 5))
         ope_seed_base = int(getattr(ope_cfg, 'seed', int(getattr(config.training, 'seed', 0))))
         ope_seed = ope_seed_base + 10007 * int(self.offline_rl_iteration)
+        amq_enabled = self._is_amq_enabled()
 
-        # ── Step 0: Prepare a fixed AM-Q evaluation context for fair OPE gating ─
-        ope_eval_features = self._prepare_amq_eval_feature_batches(
-            dataset=dataset,
-            num_batches=ope_num_batches,
-            eval_seed=ope_seed,
-        )
-        j_old = self._evaluate_policy_amq(
-            dataset=dataset,
-            num_batches=ope_num_batches,
-            rollout_horizon=ope_rollout_horizon,
-            policy=self.policy,
-            eval_features=ope_eval_features,
-            eval_seed=ope_seed,
-        )
-        cprint(f"[OPE] Behavior policy value J_old = {j_old:.4f}", "cyan")
+        ope_eval_features = None
+        j_old = None
+        if amq_enabled:
+            # ── Step 0: Prepare a fixed AM-Q evaluation context for fair OPE gating ─
+            ope_eval_features = self._prepare_amq_eval_feature_batches(
+                dataset=dataset,
+                num_batches=ope_num_batches,
+                eval_seed=ope_seed,
+            )
+            j_old = self._evaluate_policy_amq(
+                dataset=dataset,
+                num_batches=ope_num_batches,
+                rollout_horizon=ope_rollout_horizon,
+                policy=self.policy,
+                eval_features=ope_eval_features,
+                eval_seed=ope_seed,
+            )
+            cprint(f"[OPE] Behavior policy value J_old = {j_old:.4f}", "cyan")
+        else:
+            cprint(
+                f"[OPE] Disabled for task.execution.mode={self._task_execution_mode()}; "
+                "skipping AM-Q evaluation and rollback gate.",
+                "yellow",
+            )
 
         # ── Step 1: Reset policy optimizer state for RL fine-tuning ──────────────
         # Reusing Adam moments from IL / checkpoint resume can make the first PPO
@@ -1105,17 +2100,17 @@ class RL100Trainer:
         self._prepare_policy_optimizer_for_rl()
 
         # ── Step 1: Save snapshot for potential rollback ──────────────────────────
-        policy_snapshot = copy.deepcopy(self.policy.state_dict())
-        ema_snapshot = copy.deepcopy(self.ema_policy.state_dict()) if self.ema_policy is not None else None
+        policy_snapshot = copy.deepcopy(self.policy.state_dict()) if amq_enabled else None
+        ema_snapshot = copy.deepcopy(self.ema_policy.state_dict()) if amq_enabled and self.ema_policy is not None else None
         ema_helper_snapshot = None
-        if self.ema_policy is not None and hasattr(self, 'ema'):
+        if amq_enabled and self.ema_policy is not None and hasattr(self, 'ema'):
             ema_helper_snapshot = {
                 'decay': self.ema.decay,
                 'optimization_step': self.ema.optimization_step,
             }
-        consistency_snapshot = copy.deepcopy(self.consistency_model.state_dict())
-        policy_optimizer_snapshot = copy.deepcopy(self.policy_optimizer.state_dict())
-        consistency_optimizer_snapshot = copy.deepcopy(self.consistency_optimizer.state_dict())
+        consistency_snapshot = copy.deepcopy(self.consistency_model.state_dict()) if amq_enabled else None
+        policy_optimizer_snapshot = copy.deepcopy(self.policy_optimizer.state_dict()) if amq_enabled else None
+        consistency_optimizer_snapshot = copy.deepcopy(self.consistency_optimizer.state_dict()) if amq_enabled else None
         behavior_policy = copy.deepcopy(self.policy)
         behavior_policy.to(self.device)
         behavior_policy.eval()
@@ -1157,157 +2152,289 @@ class RL100Trainer:
         ppo_inner_steps = getattr(config.training, 'ppo_inner_steps', 4)
         # Paper Eq.22: L_total = L_RL + λ_CD · L_CD
         lambda_cd = getattr(config.training, 'lambda_cd', 1.0)
+        offline_ppo_max_passes = int(getattr(config.training, 'offline_ppo_max_passes', 0))
+        ppo_target_kl = getattr(config.training, 'ppo_target_kl', None)
+        ppo_target_kl = float(ppo_target_kl) if ppo_target_kl is not None and float(ppo_target_kl) > 0 else None
+        ppo_target_clip_frac = getattr(config.training, 'ppo_target_clip_frac', None)
+        ppo_target_clip_frac = (
+            float(ppo_target_clip_frac)
+            if ppo_target_clip_frac is not None and float(ppo_target_clip_frac) > 0
+            else None
+        )
+        ppo_early_stop_min_steps = int(getattr(config.training, 'ppo_early_stop_min_steps', 0))
 
-        ppo_loss_per_epoch = []
-        for epoch in range(num_epochs):
-            ppo_losses = []
-            cd_losses = []
-            reg_losses = []
-            grad_norms = []
-            approx_kls = []
-            clip_fracs = []
-            mean_ratios = []
-            min_ratios = []
-            max_ratios = []
-            mean_abs_ratio_devs = []
+        def _should_early_stop_ppo(metrics: Dict[str, float], completed_steps: int) -> bool:
+            if completed_steps < ppo_early_stop_min_steps:
+                return False
+            if ppo_target_kl is not None and metrics['approx_kl'] >= ppo_target_kl:
+                return True
+            if ppo_target_clip_frac is not None and metrics['clip_frac'] >= ppo_target_clip_frac:
+                return True
+            return False
 
-            buffer_order = np.random.permutation(len(offline_ppo_buffer))
-            for buffer_idx in buffer_order:
-                buffer_batch = offline_ppo_buffer[int(buffer_idx)]
-                obs_dict = None
-                if 'obs' in buffer_batch:
-                    obs_dict = dict_apply(
-                        buffer_batch['obs'],
-                        lambda x: x.to(self.device, non_blocking=True)
+        def _format_early_stop_reason(metrics: Dict[str, float]) -> str:
+            reasons = []
+            if ppo_target_kl is not None and metrics['approx_kl'] >= ppo_target_kl:
+                reasons.append(
+                    f"approx_kl={metrics['approx_kl']:.3e} >= target_kl={ppo_target_kl:.3e}"
+                )
+            if ppo_target_clip_frac is not None and metrics['clip_frac'] >= ppo_target_clip_frac:
+                reasons.append(
+                    f"clip_frac={metrics['clip_frac']:.6f} >= target_clip_frac={ppo_target_clip_frac:.6f}"
+                )
+            return ", ".join(reasons) if reasons else "threshold reached"
+
+        def _log_offline_step_summary(step_idx: int, total_steps: int, summary: Dict[str, float]) -> None:
+            cprint(
+                f"[Offline RL] Step {step_idx}/{total_steps}, PPO Loss: {summary['ppo_loss']:.4f}, "
+                f"PostKL: {summary['approx_kl']:.3e}, "
+                f"PostClipFrac: {summary['clip_frac']:.6f}, "
+                f"PostMeanRatio: {summary['mean_ratio']:.6f}, "
+                f"PostRatioDev: {summary['mean_abs_ratio_dev']:.3e}, "
+                f"GradNorm: {summary['grad_norm']:.4f}, "
+                f"Reg Loss: {summary['reg_loss']:.4f}, "
+                f"CD Loss: {summary['cd_loss']:.4f}",
+                "green",
+            )
+
+        def _offline_ppo_update(buffer_batch) -> Dict[str, float]:
+            obs_dict = None
+            if 'obs' in buffer_batch:
+                obs_dict = dict_apply(
+                    buffer_batch['obs'],
+                    lambda x: x.to(self.device, non_blocking=True)
+                )
+            global_cond = buffer_batch['global_cond'].to(self.device, non_blocking=True)
+            trajectory_old = [
+                traj.to(self.device, non_blocking=True)
+                for traj in buffer_batch['trajectory_old']
+            ]
+            log_probs_old = [
+                log_prob.to(self.device, non_blocking=True)
+                for log_prob in buffer_batch['log_probs_old']
+            ]
+            advantages = buffer_batch['advantages'].to(self.device, non_blocking=True)
+            executed_action_steps = buffer_batch.get('executed_action_steps', None)
+            if executed_action_steps is not None:
+                executed_action_steps = executed_action_steps.to(self.device, non_blocking=True)
+            run_cd_this_batch = (self.global_step % config.training.cd_every == 0)
+
+            batch_ppo_losses = []
+            batch_approx_kls = []
+            batch_clip_fracs = []
+            batch_mean_ratios = []
+            batch_min_ratios = []
+            batch_max_ratios = []
+            batch_mean_abs_ratio_devs = []
+            batch_reg_losses = []
+            batch_cd_losses = []
+            batch_grad_norms = []
+
+            for ppo_inner in range(ppo_inner_steps):
+                ppo_loss, _ = self.policy.compute_ppo_loss(
+                    obs_dict=None,
+                    old_log_probs=log_probs_old,
+                    advantages=advantages,
+                    trajectory=trajectory_old,
+                    global_cond=global_cond,
+                    executed_action_steps=executed_action_steps,
+                )
+
+                total_loss = ppo_loss
+                if obs_dict is not None:
+                    reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
+                    if reg_info['total_reg_loss'] > 0:
+                        total_loss = total_loss + reg_loss
+                        batch_reg_losses.append(float(reg_info['total_reg_loss']))
+                run_cd_step = (
+                    obs_dict is not None
+                    and lambda_cd > 0.0
+                    and run_cd_this_batch
+                    and ppo_inner == 0
+                )
+                if run_cd_step:
+                    cd_loss, cd_info = self.consistency_distillation.compute_distillation_loss(
+                        obs_dict,
+                        global_cond=global_cond,
                     )
-                global_cond = buffer_batch['global_cond'].to(self.device, non_blocking=True)
-                trajectory_old = [
-                    traj.to(self.device, non_blocking=True)
-                    for traj in buffer_batch['trajectory_old']
-                ]
-                log_probs_old = [
-                    log_prob.to(self.device, non_blocking=True)
-                    for log_prob in buffer_batch['log_probs_old']
-                ]
-                advantages = buffer_batch['advantages'].to(self.device, non_blocking=True)
-                run_cd_this_batch = (self.global_step % config.training.cd_every == 0)
-                batch_ppo_losses = []
-                batch_approx_kls = []
-                batch_clip_fracs = []
-                batch_mean_ratios = []
-                batch_min_ratios = []
-                batch_max_ratios = []
-                batch_mean_abs_ratio_devs = []
+                    total_loss = total_loss + lambda_cd * cd_loss
+                    batch_cd_losses.append(float(cd_info['cd_loss']))
 
-                # ── Inner PPO loop: N gradient steps with SAME old trajectory ─────
-                for ppo_inner in range(ppo_inner_steps):
-                    ppo_loss, _ = self.policy.compute_ppo_loss(
+                self.policy_optimizer.zero_grad()
+                self.consistency_optimizer.zero_grad()
+                total_loss.backward()
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    self.policy.parameters(),
+                    config.training.max_grad_norm
+                )
+                batch_grad_norms.append(float(grad_norm))
+                self.policy_optimizer.step()
+                if run_cd_step:
+                    self.consistency_optimizer.step()
+
+                ppo_loss_display = float(-ppo_loss.item())
+                with torch.no_grad():
+                    _, ppo_info_post = self.policy.compute_ppo_loss(
                         obs_dict=None,
                         old_log_probs=log_probs_old,
                         advantages=advantages,
                         trajectory=trajectory_old,
                         global_cond=global_cond,
+                        executed_action_steps=executed_action_steps,
                     )
+                batch_ppo_losses.append(ppo_loss_display)
+                batch_approx_kls.append(float(ppo_info_post.get('approx_kl', 0.0)))
+                batch_clip_fracs.append(float(ppo_info_post.get('clip_frac', 0.0)))
+                batch_mean_ratios.append(float(ppo_info_post.get('mean_ratio', 1.0)))
+                batch_min_ratios.append(float(ppo_info_post.get('min_ratio', 1.0)))
+                batch_max_ratios.append(float(ppo_info_post.get('max_ratio', 1.0)))
+                batch_mean_abs_ratio_devs.append(float(ppo_info_post.get('mean_abs_ratio_dev', 0.0)))
 
-                    # Apply consistency distillation at most once per outer batch.
-                    total_loss = ppo_loss
-                    if obs_dict is not None:
-                        reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
-                        if reg_info['total_reg_loss'] > 0:
-                            total_loss = total_loss + reg_loss
-                            reg_losses.append(reg_info['total_reg_loss'])
-                    else:
-                        reg_info = {
-                            'total_reg_loss': 0.0,
-                        }
-                    run_cd_step = (
-                        obs_dict is not None
-                        and lambda_cd > 0.0
-                        and run_cd_this_batch
-                        and ppo_inner == 0
+            if self.ema_policy is not None:
+                self.ema.step(self.policy)
+
+            metrics = {
+                'ppo_loss': float(np.mean(batch_ppo_losses)) if batch_ppo_losses else 0.0,
+                'approx_kl': float(np.mean(batch_approx_kls)) if batch_approx_kls else 0.0,
+                'clip_frac': float(np.mean(batch_clip_fracs)) if batch_clip_fracs else 0.0,
+                'mean_ratio': float(np.mean(batch_mean_ratios)) if batch_mean_ratios else 1.0,
+                'min_ratio': float(np.min(batch_min_ratios)) if batch_min_ratios else 1.0,
+                'max_ratio': float(np.max(batch_max_ratios)) if batch_max_ratios else 1.0,
+                'mean_abs_ratio_dev': float(np.mean(batch_mean_abs_ratio_devs)) if batch_mean_abs_ratio_devs else 0.0,
+                'grad_norm': float(np.mean(batch_grad_norms)) if batch_grad_norms else 0.0,
+                'reg_loss': float(np.mean(batch_reg_losses)) if batch_reg_losses else 0.0,
+                'cd_loss': float(np.mean(batch_cd_losses)) if batch_cd_losses else 0.0,
+            }
+            if self.global_step % config.training.log_every == 0 and config.logging.use_wandb:
+                log_dict = {
+                    'ppo/loss': metrics['ppo_loss'],
+                    'ppo/grad_norm': metrics['grad_norm'],
+                    'ppo/approx_kl': metrics['approx_kl'],
+                    'ppo/clip_frac': metrics['clip_frac'],
+                    'ppo/mean_ratio': metrics['mean_ratio'],
+                    'ppo/min_ratio': metrics['min_ratio'],
+                    'ppo/max_ratio': metrics['max_ratio'],
+                    'ppo/mean_abs_ratio_dev': metrics['mean_abs_ratio_dev'],
+                }
+                if metrics['reg_loss'] > 0:
+                    log_dict['ppo/obs_reg_loss'] = metrics['reg_loss']
+                if metrics['cd_loss'] > 0:
+                    log_dict['cd/loss'] = metrics['cd_loss']
+                wandb.log(log_dict, step=self.global_step)
+
+            self.global_step += 1
+            return metrics
+
+        ppo_loss_per_epoch = []
+        ppo_losses = []
+        cd_losses = []
+        reg_losses = []
+        grad_norms = []
+        approx_kls = []
+        clip_fracs = []
+        mean_ratios = []
+        mean_abs_ratio_devs = []
+
+        def _append_update_metrics(target: Dict[str, float]):
+            ppo_losses.append(target['ppo_loss'])
+            cd_losses.append(target['cd_loss'])
+            reg_losses.append(target['reg_loss'])
+            grad_norms.append(target['grad_norm'])
+            approx_kls.append(target['approx_kl'])
+            clip_fracs.append(target['clip_frac'])
+            mean_ratios.append(target['mean_ratio'])
+            mean_abs_ratio_devs.append(target['mean_abs_ratio_dev'])
+
+        def _summarize_metrics(metric_buffer: List[Dict[str, float]]) -> Dict[str, float]:
+            if not metric_buffer:
+                return {
+                    'ppo_loss': 0.0,
+                    'approx_kl': 0.0,
+                    'clip_frac': 0.0,
+                    'mean_ratio': 1.0,
+                    'mean_abs_ratio_dev': 0.0,
+                    'grad_norm': 0.0,
+                    'reg_loss': 0.0,
+                    'cd_loss': 0.0,
+                }
+            return {
+                'ppo_loss': float(np.mean([item['ppo_loss'] for item in metric_buffer])),
+                'approx_kl': float(np.mean([item['approx_kl'] for item in metric_buffer])),
+                'clip_frac': float(np.mean([item['clip_frac'] for item in metric_buffer])),
+                'mean_ratio': float(np.mean([item['mean_ratio'] for item in metric_buffer])),
+                'mean_abs_ratio_dev': float(np.mean([item['mean_abs_ratio_dev'] for item in metric_buffer])),
+                'grad_norm': float(np.mean([item['grad_norm'] for item in metric_buffer])),
+                'reg_loss': float(np.mean([item['reg_loss'] for item in metric_buffer])),
+                'cd_loss': float(np.mean([item['cd_loss'] for item in metric_buffer])),
+            }
+
+        if num_steps is not None and int(num_steps) > 0:
+            num_steps = int(num_steps)
+            if offline_ppo_max_passes > 0:
+                capped_num_steps = min(num_steps, offline_ppo_max_passes * max(1, len(offline_ppo_buffer)))
+                if capped_num_steps < num_steps:
+                    cprint(
+                        f"[Offline RL] Cap PPO steps: requested {num_steps}, using {capped_num_steps} "
+                        f"({offline_ppo_max_passes} passes over {len(offline_ppo_buffer)} fixed PPO batches).",
+                        "yellow",
                     )
-                    if run_cd_step:
-                        cd_loss, cd_info = self.consistency_distillation.compute_distillation_loss(
-                            obs_dict,
-                            global_cond=global_cond,
-                        )
-                        total_loss = total_loss + lambda_cd * cd_loss
-                        cd_losses.append(cd_info['cd_loss'])
+                num_steps = capped_num_steps
+            steps_per_bucket = max(1, len(offline_ppo_buffer))
+            bucket_metrics = []
+            buffer_schedule = []
+            while len(buffer_schedule) < num_steps:
+                buffer_schedule.extend(np.random.permutation(len(offline_ppo_buffer)).tolist())
+            buffer_schedule = buffer_schedule[:num_steps]
 
-                    self.policy_optimizer.zero_grad()
-                    # Also zero CD optimizer if joint
-                    self.consistency_optimizer.zero_grad()
-                    total_loss.backward()
-                    grad_norm = torch.nn.utils.clip_grad_norm_(
-                        self.policy.parameters(),
-                        config.training.max_grad_norm
+            # Traverse the fixed PPO buffer in shuffled passes instead of
+            # sampling mini-batches with replacement. This keeps coverage
+            # balanced and makes PPO/OPE behavior much less noisy.
+            for step, buffer_idx in enumerate(buffer_schedule):
+                update_metrics = _offline_ppo_update(offline_ppo_buffer[buffer_idx])
+                _append_update_metrics(update_metrics)
+                bucket_metrics.append(update_metrics)
+
+                should_flush = ((step + 1) % steps_per_bucket == 0) or (step + 1 == num_steps)
+                if should_flush:
+                    summary = _summarize_metrics(bucket_metrics)
+                    _log_offline_step_summary(step + 1, num_steps, summary)
+                    ppo_loss_per_epoch.append(summary['ppo_loss'])
+                    bucket_metrics = []
+                if _should_early_stop_ppo(update_metrics, step + 1):
+                    if bucket_metrics:
+                        summary = _summarize_metrics(bucket_metrics)
+                        _log_offline_step_summary(step + 1, num_steps, summary)
+                        ppo_loss_per_epoch.append(summary['ppo_loss'])
+                        bucket_metrics = []
+                    cprint(
+                        f"[Offline RL] Early stop at step {step + 1}/{num_steps}: "
+                        f"{_format_early_stop_reason(update_metrics)}",
+                        "yellow",
                     )
-                    grad_norms.append(float(grad_norm))
-                    self.policy_optimizer.step()
-                    # Update consistency model params too
-                    if run_cd_step:
-                        self.consistency_optimizer.step()
+                    break
+        else:
+            num_epochs = int(num_epochs if num_epochs is not None else 0)
+            for epoch in range(num_epochs):
+                epoch_metrics = []
+                buffer_order = np.random.permutation(len(offline_ppo_buffer))
+                for buffer_idx in buffer_order:
+                    update_metrics = _offline_ppo_update(offline_ppo_buffer[int(buffer_idx)])
+                    _append_update_metrics(update_metrics)
+                    epoch_metrics.append(update_metrics)
 
-                    ppo_loss_display = float(-ppo_loss.item())
-                    with torch.no_grad():
-                        _, ppo_info_post = self.policy.compute_ppo_loss(
-                            obs_dict=None,
-                            old_log_probs=log_probs_old,
-                            advantages=advantages,
-                            trajectory=trajectory_old,
-                            global_cond=global_cond,
-                        )
-                    batch_ppo_losses.append(ppo_loss_display)
-                    batch_approx_kls.append(float(ppo_info_post.get('approx_kl', 0.0)))
-                    batch_clip_fracs.append(float(ppo_info_post.get('clip_frac', 0.0)))
-                    batch_mean_ratios.append(float(ppo_info_post.get('mean_ratio', 1.0)))
-                    batch_min_ratios.append(float(ppo_info_post.get('min_ratio', 1.0)))
-                    batch_max_ratios.append(float(ppo_info_post.get('max_ratio', 1.0)))
-                    batch_mean_abs_ratio_devs.append(float(ppo_info_post.get('mean_abs_ratio_dev', 0.0)))
-
-                ppo_loss_display = float(np.mean(batch_ppo_losses)) if batch_ppo_losses else 0.0
-                ppo_losses.append(ppo_loss_display)
-                approx_kls.extend(batch_approx_kls)
-                clip_fracs.extend(batch_clip_fracs)
-                mean_ratios.extend(batch_mean_ratios)
-                min_ratios.extend(batch_min_ratios)
-                max_ratios.extend(batch_max_ratios)
-                mean_abs_ratio_devs.extend(batch_mean_abs_ratio_devs)
-
-                # Update EMA
-                if self.ema_policy is not None:
-                    self.ema.step(self.policy)
-
-                # Log
-                if self.global_step % config.training.log_every == 0 and config.logging.use_wandb:
-                    log_dict = {
-                        'ppo/loss': ppo_loss_display,
-                        'ppo/grad_norm': grad_norms[-1] if grad_norms else 0.0,
-                        'ppo/approx_kl': float(np.mean(batch_approx_kls)) if batch_approx_kls else 0.0,
-                        'ppo/clip_frac': float(np.mean(batch_clip_fracs)) if batch_clip_fracs else 0.0,
-                        'ppo/mean_ratio': float(np.mean(batch_mean_ratios)) if batch_mean_ratios else 1.0,
-                        'ppo/min_ratio': float(np.min(batch_min_ratios)) if batch_min_ratios else 1.0,
-                        'ppo/max_ratio': float(np.max(batch_max_ratios)) if batch_max_ratios else 1.0,
-                        'ppo/mean_abs_ratio_dev': float(np.mean(batch_mean_abs_ratio_devs)) if batch_mean_abs_ratio_devs else 0.0,
-                    }
-                    if reg_losses:
-                        log_dict['ppo/obs_reg_loss'] = reg_losses[-1]
-                    if cd_losses:
-                        log_dict['cd/loss'] = cd_losses[-1]
-                    wandb.log(log_dict, step=self.global_step)
-
-                self.global_step += 1
-
-            epoch_ppo_loss = float(np.mean(ppo_losses) if ppo_losses else 0.0)
-            cprint(f"[Offline RL] Epoch {epoch}/{num_epochs}, PPO Loss: {epoch_ppo_loss:.4f}, "
-                   f"PostKL: {np.mean(approx_kls) if approx_kls else 0.0:.3e}, "
-                   f"PostClipFrac: {np.mean(clip_fracs) if clip_fracs else 0.0:.6f}, "
-                   f"PostMeanRatio: {np.mean(mean_ratios) if mean_ratios else 1.0:.6f}, "
-                   f"PostRatioDev: {np.mean(mean_abs_ratio_devs) if mean_abs_ratio_devs else 0.0:.3e}, "
-                   f"GradNorm: {np.mean(grad_norms) if grad_norms else 0.0:.4f}, "
-                   f"Reg Loss: {np.mean(reg_losses) if reg_losses else 0:.4f}, "
-                   f"CD Loss: {np.mean(cd_losses) if cd_losses else 0:.4f}", "green")
-            ppo_loss_per_epoch.append(epoch_ppo_loss)
+                summary = _summarize_metrics(epoch_metrics)
+                cprint(
+                    f"[Offline RL] Epoch {epoch}/{num_epochs}, PPO Loss: {summary['ppo_loss']:.4f}, "
+                    f"PostKL: {summary['approx_kl']:.3e}, "
+                    f"PostClipFrac: {summary['clip_frac']:.6f}, "
+                    f"PostMeanRatio: {summary['mean_ratio']:.6f}, "
+                    f"PostRatioDev: {summary['mean_abs_ratio_dev']:.3e}, "
+                    f"GradNorm: {summary['grad_norm']:.4f}, "
+                    f"Reg Loss: {summary['reg_loss']:.4f}, "
+                    f"CD Loss: {summary['cd_loss']:.4f}",
+                    "green",
+                )
+                ppo_loss_per_epoch.append(summary['ppo_loss'])
 
         ppo_loss_plot_path = self._save_loss_curve_plot(
             loss_history=ppo_loss_per_epoch,
@@ -1328,37 +2455,44 @@ class RL100Trainer:
         # ── Step 5: OPE Gate (paper Eq.20) ───────────────────────────────────────
         # Accept the PPO-updated policy only if AM-Q improves by δ = 0.05·|J_old|.
         # Otherwise roll back to the behavior-policy snapshot.
-        j_new = self._evaluate_policy_amq(
-            dataset=dataset,
-            num_batches=ope_num_batches,
-            rollout_horizon=ope_rollout_horizon,
-            policy=self.policy,
-            eval_features=ope_eval_features,
-            eval_seed=ope_seed,
-        )
-        delta_coef = float(getattr(ope_cfg, 'delta_coef', 0.05))
-        delta_abs_min = float(getattr(ope_cfg, 'delta_abs_min', 0.0))
-        delta = max(delta_abs_min, delta_coef * abs(j_old)) if j_old != 0 else delta_abs_min
-        if j_new - j_old >= delta:
-            cprint(f"[OPE] Policy ACCEPTED: J_new={j_new:.4f} > J_old={j_old:.4f} + δ={delta:.4f}", "green")
-        else:
-            cprint(f"[OPE] Policy REJECTED: J_new={j_new:.4f} ≤ J_old={j_old:.4f} + δ={delta:.4f}. "
-                   f"Rolling back to behavior policy.", "yellow")
-            self.policy.load_state_dict(policy_snapshot)
-            if self.ema_policy is not None and ema_snapshot is not None:
-                self.ema_policy.load_state_dict(ema_snapshot)
-            if ema_helper_snapshot is not None and hasattr(self, 'ema'):
-                self.ema.decay = ema_helper_snapshot['decay']
-                self.ema.optimization_step = ema_helper_snapshot['optimization_step']
-            self.consistency_model.load_state_dict(consistency_snapshot)
-            self.policy_optimizer.load_state_dict(policy_optimizer_snapshot)
-            self.consistency_optimizer.load_state_dict(consistency_optimizer_snapshot)
+        if amq_enabled:
+            j_new = self._evaluate_policy_amq(
+                dataset=dataset,
+                num_batches=ope_num_batches,
+                rollout_horizon=ope_rollout_horizon,
+                policy=self.policy,
+                eval_features=ope_eval_features,
+                eval_seed=ope_seed,
+            )
+            delta_coef = float(getattr(ope_cfg, 'delta_coef', 0.05))
+            delta_abs_min = float(getattr(ope_cfg, 'delta_abs_min', 0.0))
+            delta = max(delta_abs_min, delta_coef * abs(j_old)) if j_old != 0 else delta_abs_min
+            accepted = (j_new - j_old) >= delta
+            if accepted:
+                cprint(f"[OPE] Policy ACCEPTED: J_new={j_new:.4f} > J_old={j_old:.4f} + δ={delta:.4f}", "green")
+            else:
+                cprint(f"[OPE] Policy REJECTED: J_new={j_new:.4f} ≤ J_old={j_old:.4f} + δ={delta:.4f}. "
+                       f"Rolling back to behavior policy.", "yellow")
+                self.policy.load_state_dict(policy_snapshot)
+                if self.ema_policy is not None and ema_snapshot is not None:
+                    self.ema_policy.load_state_dict(ema_snapshot)
+                if ema_helper_snapshot is not None and hasattr(self, 'ema'):
+                    self.ema.decay = ema_helper_snapshot['decay']
+                    self.ema.optimization_step = ema_helper_snapshot['optimization_step']
+                self.consistency_model.load_state_dict(consistency_snapshot)
+                self.policy_optimizer.load_state_dict(policy_optimizer_snapshot)
+                self.consistency_optimizer.load_state_dict(consistency_optimizer_snapshot)
 
-        if config.logging.use_wandb:
+            if config.logging.use_wandb:
+                wandb.log({
+                    'ope/enabled': 1,
+                    'ope/j_old': j_old,
+                    'ope/j_new': j_new,
+                    'ope/accepted': int(accepted),
+                }, step=self.global_step)
+        elif config.logging.use_wandb:
             wandb.log({
-                'ope/j_old': j_old,
-                'ope/j_new': j_new,
-                'ope/accepted': int(j_new - j_old >= delta),
+                'ope/enabled': 0,
             }, step=self.global_step)
 
         return {
@@ -1472,7 +2606,9 @@ class RL100Trainer:
     def online_rl_optimize(
         self,
         online_episodes: List[dict],
-        num_epochs: int,
+        num_epochs: Optional[int] = None,
+        num_value_steps: Optional[int] = None,
+        num_policy_steps: Optional[int] = None,
         online_iteration: Optional[int] = None,
     ) -> Dict:
         """
@@ -1486,6 +2622,36 @@ class RL100Trainer:
         gae_lambda = float(getattr(config.training, 'gae_lambda', 0.95))
         gamma_chunk = self.critics.gamma
         lambda_cd = float(getattr(config.training, 'lambda_cd', 1.0))
+        ppo_target_kl = getattr(config.training, 'ppo_target_kl', None)
+        ppo_target_kl = float(ppo_target_kl) if ppo_target_kl is not None and float(ppo_target_kl) > 0 else None
+        ppo_target_clip_frac = getattr(config.training, 'ppo_target_clip_frac', None)
+        ppo_target_clip_frac = (
+            float(ppo_target_clip_frac)
+            if ppo_target_clip_frac is not None and float(ppo_target_clip_frac) > 0
+            else None
+        )
+        ppo_early_stop_min_steps = int(getattr(config.training, 'ppo_early_stop_min_steps', 0))
+
+        def _should_early_stop_online(metrics: Dict[str, float], completed_steps: int) -> bool:
+            if completed_steps < ppo_early_stop_min_steps:
+                return False
+            if ppo_target_kl is not None and metrics['approx_kl'] >= ppo_target_kl:
+                return True
+            if ppo_target_clip_frac is not None and metrics['clip_frac'] >= ppo_target_clip_frac:
+                return True
+            return False
+
+        def _format_online_early_stop_reason(metrics: Dict[str, float]) -> str:
+            reasons = []
+            if ppo_target_kl is not None and metrics['approx_kl'] >= ppo_target_kl:
+                reasons.append(
+                    f"approx_kl={metrics['approx_kl']:.3e} >= target_kl={ppo_target_kl:.3e}"
+                )
+            if ppo_target_clip_frac is not None and metrics['clip_frac'] >= ppo_target_clip_frac:
+                reasons.append(
+                    f"clip_frac={metrics['clip_frac']:.6f} >= target_clip_frac={ppo_target_clip_frac:.6f}"
+                )
+            return ", ".join(reasons) if reasons else "threshold reached"
 
         decision_episodes = []
         for ep in online_episodes:
@@ -1506,22 +2672,12 @@ class RL100Trainer:
         rollout_buffer = []
         with torch.no_grad():
             for ep_steps in decision_episodes:
-                obs_dict = {
-                    'point_cloud': torch.from_numpy(
-                        np.stack([step['obs']['point_cloud'] for step in ep_steps], axis=0)
-                    ).to(self.device),
-                    'agent_pos': torch.from_numpy(
-                        np.stack([step['obs']['agent_pos'] for step in ep_steps], axis=0)
-                    ).to(self.device),
-                }
-                next_obs_dict = {
-                    'point_cloud': torch.from_numpy(
-                        np.stack([step['next_obs']['point_cloud'] for step in ep_steps], axis=0)
-                    ).to(self.device),
-                    'agent_pos': torch.from_numpy(
-                        np.stack([step['next_obs']['agent_pos'] for step in ep_steps], axis=0)
-                    ).to(self.device),
-                }
+                obs_dict = self._obs_np_to_torch(
+                    self._stack_obs_np_dicts([step['obs'] for step in ep_steps])
+                )
+                next_obs_dict = self._obs_np_to_torch(
+                    self._stack_obs_np_dicts([step['next_obs'] for step in ep_steps])
+                )
                 rewards = torch.as_tensor(
                     [step['reward'] for step in ep_steps], dtype=torch.float32, device=self.device
                 )
@@ -1547,6 +2703,7 @@ class RL100Trainer:
                         'obs': step['obs'],
                         'trajectory': step['trajectory'],
                         'log_probs_old': step['log_probs_old'],
+                        'executed_action_steps': int(step.get('executed_action_steps', self.policy.n_action_steps)),
                         'obs_features': obs_features[idx].detach().cpu(),
                         'return': float(returns[idx].item()),
                         'advantage': float(advantages[idx].item()),
@@ -1567,29 +2724,58 @@ class RL100Trainer:
         critic_indices = np.arange(len(rollout_buffer))
         v_losses = []
         v_loss_per_epoch = []
-        for critic_epoch in range(5):
-            np.random.shuffle(critic_indices)
-            epoch_v_losses = []
-            for start in range(0, len(critic_indices), batch_size):
-                idx = critic_indices[start:start + batch_size]
-                obs_features = torch.stack([rollout_buffer[i]['obs_features'] for i in idx]).to(self.device)
-                returns = torch.as_tensor(
-                    [rollout_buffer[i]['return'] for i in idx],
-                    dtype=torch.float32,
-                    device=self.device,
-                ).unsqueeze(-1)
-                v_pred = self.critics.get_value(obs_features)
-                v_loss = lambda_v * F.mse_loss(v_pred, returns)
+        value_steps_per_bucket = max(1, (len(rollout_buffer) + batch_size - 1) // batch_size)
 
-                self.v_optimizer.zero_grad()
-                v_loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.critics.v_network.parameters(), config.training.max_grad_norm)
-                self.v_optimizer.step()
-                self.critics.update_target_network(tau=config.critics.target_update_tau)
-                v_losses.append(v_loss.item())
-                epoch_v_losses.append(v_loss.item())
-            if epoch_v_losses:
-                v_loss_per_epoch.append(float(np.mean(epoch_v_losses)))
+        def _sample_rollout_indices() -> np.ndarray:
+            replace = len(rollout_buffer) < batch_size
+            return np.random.choice(len(rollout_buffer), size=batch_size, replace=replace)
+
+        def _online_value_update(idx: np.ndarray) -> float:
+            obs_features = torch.stack([rollout_buffer[i]['obs_features'] for i in idx]).to(self.device)
+            returns = torch.as_tensor(
+                [rollout_buffer[i]['return'] for i in idx],
+                dtype=torch.float32,
+                device=self.device,
+            ).unsqueeze(-1)
+            v_pred = self.critics.get_value(obs_features)
+            v_loss = lambda_v * F.mse_loss(v_pred, returns)
+
+            self.v_optimizer.zero_grad()
+            v_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.critics.v_network.parameters(), config.training.max_grad_norm)
+            self.v_optimizer.step()
+            self.critics.update_target_network(tau=config.critics.target_update_tau)
+            return float(v_loss.item())
+
+        if num_value_steps is not None and int(num_value_steps) > 0:
+            num_value_steps = int(num_value_steps)
+            bucket_v_losses = []
+            for step in range(num_value_steps):
+                v_loss_item = _online_value_update(_sample_rollout_indices())
+                v_losses.append(v_loss_item)
+                bucket_v_losses.append(v_loss_item)
+                should_flush = ((step + 1) % value_steps_per_bucket == 0) or (step + 1 == num_value_steps)
+                if should_flush:
+                    bucket_mean = float(np.mean(bucket_v_losses)) if bucket_v_losses else 0.0
+                    cprint(f"[Online RL] Value Step {step + 1}/{num_value_steps}, "
+                           f"V Loss: {bucket_mean:.4f}", "green")
+                    v_loss_per_epoch.append(bucket_mean)
+                    bucket_v_losses = []
+        else:
+            critic_indices = np.arange(len(rollout_buffer))
+            for critic_epoch in range(5):
+                np.random.shuffle(critic_indices)
+                epoch_v_losses = []
+                for start in range(0, len(critic_indices), batch_size):
+                    idx = critic_indices[start:start + batch_size]
+                    v_loss_item = _online_value_update(idx)
+                    v_losses.append(v_loss_item)
+                    epoch_v_losses.append(v_loss_item)
+                if epoch_v_losses:
+                    epoch_mean = float(np.mean(epoch_v_losses))
+                    cprint(f"[Online RL] Value Epoch {critic_epoch + 1}/5, "
+                           f"V Loss: {epoch_mean:.4f}", "green")
+                    v_loss_per_epoch.append(epoch_mean)
 
         # On-policy PPO over the stored rollout buffer.
         self.policy.train()
@@ -1600,145 +2786,218 @@ class RL100Trainer:
         grad_norms = []
         approx_kls = []
         clip_fracs = []
-        policy_indices = np.arange(len(rollout_buffer))
-        for epoch in range(num_epochs):
-            np.random.shuffle(policy_indices)
-            epoch_ppo_losses = []
-            epoch_cd_losses = []
-            epoch_reg_losses = []
-            epoch_grad_norms = []
-            epoch_approx_kls = []
-            epoch_clip_fracs = []
-            epoch_mean_ratios = []
-            epoch_min_ratios = []
-            epoch_max_ratios = []
-            epoch_mean_abs_ratio_devs = []
-            for start in range(0, len(policy_indices), batch_size):
-                idx = policy_indices[start:start + batch_size]
-                obs_dict = {
-                    'point_cloud': torch.from_numpy(
-                        np.stack([rollout_buffer[i]['obs']['point_cloud'] for i in idx], axis=0)
-                    ).to(self.device),
-                    'agent_pos': torch.from_numpy(
-                        np.stack([rollout_buffer[i]['obs']['agent_pos'] for i in idx], axis=0)
-                    ).to(self.device),
-                }
-                trajectories = [
-                    torch.from_numpy(
-                        np.stack([rollout_buffer[i]['trajectory'][k] for i in idx], axis=0)
-                    ).to(self.device)
-                    for k in range(len(rollout_buffer[idx[0]]['trajectory']))
-                ]
-                old_log_probs = [
-                    torch.from_numpy(
-                        np.stack([rollout_buffer[i]['log_probs_old'][k] for i in idx], axis=0)
-                    ).to(self.device).view(-1)
-                    for k in range(len(rollout_buffer[idx[0]]['log_probs_old']))
-                ]
-                advantages = torch.as_tensor(
-                    [rollout_buffer[i]['advantage'] for i in idx],
-                    dtype=torch.float32,
-                    device=self.device,
-                ).unsqueeze(-1)
-                _, global_cond = self._encode_obs_representations(obs_dict)
+        policy_steps_per_bucket = max(1, (len(rollout_buffer) + batch_size - 1) // batch_size)
 
-                ppo_loss, _ = self.policy.compute_ppo_loss(
+        def _online_ppo_update(idx: np.ndarray) -> Dict[str, float]:
+            obs_dict = self._obs_np_to_torch(
+                self._stack_obs_np_dicts([rollout_buffer[i]['obs'] for i in idx])
+            )
+            trajectories = [
+                torch.from_numpy(
+                    np.stack([rollout_buffer[i]['trajectory'][k] for i in idx], axis=0)
+                ).to(self.device)
+                for k in range(len(rollout_buffer[int(idx[0])]['trajectory']))
+            ]
+            old_log_probs = [
+                torch.from_numpy(
+                    np.stack([rollout_buffer[i]['log_probs_old'][k] for i in idx], axis=0)
+                ).to(self.device).view(-1)
+                for k in range(len(rollout_buffer[int(idx[0])]['log_probs_old']))
+            ]
+            advantages = torch.as_tensor(
+                [rollout_buffer[i]['advantage'] for i in idx],
+                dtype=torch.float32,
+                device=self.device,
+            ).unsqueeze(-1)
+            executed_action_steps = torch.as_tensor(
+                [rollout_buffer[i]['executed_action_steps'] for i in idx],
+                dtype=torch.long,
+                device=self.device,
+            )
+            _, global_cond = self._encode_obs_representations(obs_dict)
+
+            ppo_loss, _ = self.policy.compute_ppo_loss(
+                obs_dict=None,
+                old_log_probs=old_log_probs,
+                advantages=advantages,
+                trajectory=trajectories,
+                global_cond=global_cond,
+                executed_action_steps=executed_action_steps,
+            )
+            ppo_loss_display = float(-ppo_loss.item())
+
+            total_loss = ppo_loss
+            reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
+            reg_loss_value = 0.0
+            if reg_info['total_reg_loss'] > 0:
+                total_loss = total_loss + reg_loss
+                reg_loss_value = float(reg_info['total_reg_loss'])
+            cd_loss_value = 0.0
+            run_cd_step = (
+                lambda_cd > 0.0
+                and (self.global_step % config.training.cd_every == 0)
+            )
+            if run_cd_step:
+                cd_loss, cd_info = self.consistency_distillation.compute_distillation_loss(
+                    obs_dict,
+                    global_cond=global_cond,
+                )
+                total_loss = total_loss + lambda_cd * cd_loss
+                cd_loss_value = float(cd_info['cd_loss'])
+
+            self.policy_optimizer.zero_grad()
+            self.consistency_optimizer.zero_grad()
+            total_loss.backward()
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.policy.parameters(),
+                config.training.max_grad_norm
+            )
+            grad_norm_value = float(grad_norm)
+            self.policy_optimizer.step()
+            if run_cd_step:
+                self.consistency_optimizer.step()
+
+            if self.ema_policy is not None:
+                self.ema.step(self.policy)
+
+            with torch.no_grad():
+                _, ppo_info_post = self.policy.compute_ppo_loss(
                     obs_dict=None,
                     old_log_probs=old_log_probs,
                     advantages=advantages,
                     trajectory=trajectories,
                     global_cond=global_cond,
+                    executed_action_steps=executed_action_steps,
                 )
-                ppo_loss_display = float(-ppo_loss.item())
 
-                total_loss = ppo_loss
-                reg_loss, reg_info = self._compute_obs_regularization(obs_dict)
-                if reg_info['total_reg_loss'] > 0:
-                    total_loss = total_loss + reg_loss
-                    epoch_reg_losses.append(reg_info['total_reg_loss'])
-                run_cd_step = (self.global_step % config.training.cd_every == 0)
-                if run_cd_step:
-                    cd_loss, cd_info = self.consistency_distillation.compute_distillation_loss(
-                        obs_dict,
-                        global_cond=global_cond,
-                    )
-                    total_loss = total_loss + lambda_cd * cd_loss
-                    epoch_cd_losses.append(cd_info['cd_loss'])
+            metrics = {
+                'ppo_loss': ppo_loss_display,
+                'grad_norm': grad_norm_value,
+                'approx_kl': float(ppo_info_post.get('approx_kl', 0.0)),
+                'clip_frac': float(ppo_info_post.get('clip_frac', 0.0)),
+                'mean_ratio': float(ppo_info_post.get('mean_ratio', 1.0)),
+                'min_ratio': float(ppo_info_post.get('min_ratio', 1.0)),
+                'max_ratio': float(ppo_info_post.get('max_ratio', 1.0)),
+                'mean_abs_ratio_dev': float(ppo_info_post.get('mean_abs_ratio_dev', 0.0)),
+                'reg_loss': reg_loss_value,
+                'cd_loss': cd_loss_value,
+            }
+            if config.logging.use_wandb and self.global_step % config.training.log_every == 0:
+                log_dict = {
+                    'online/ppo_loss': metrics['ppo_loss'],
+                    'online/grad_norm': metrics['grad_norm'],
+                    'online/approx_kl': metrics['approx_kl'],
+                    'online/clip_frac': metrics['clip_frac'],
+                    'online/mean_ratio': metrics['mean_ratio'],
+                    'online/min_ratio': metrics['min_ratio'],
+                    'online/max_ratio': metrics['max_ratio'],
+                    'online/mean_abs_ratio_dev': metrics['mean_abs_ratio_dev'],
+                }
+                if metrics['reg_loss'] > 0:
+                    log_dict['online/obs_reg_loss'] = metrics['reg_loss']
+                if metrics['cd_loss'] > 0:
+                    log_dict['online/cd_loss'] = metrics['cd_loss']
+                wandb.log(log_dict, step=self.global_step)
 
-                self.policy_optimizer.zero_grad()
-                self.consistency_optimizer.zero_grad()
-                total_loss.backward()
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    self.policy.parameters(),
-                    config.training.max_grad_norm
-                )
-                epoch_grad_norms.append(float(grad_norm))
-                self.policy_optimizer.step()
-                if run_cd_step:
-                    self.consistency_optimizer.step()
+            self.global_step += 1
+            return metrics
 
-                if self.ema_policy is not None:
-                    self.ema.step(self.policy)
+        def _summarize_online_metrics(metric_buffer: List[Dict[str, float]]) -> Dict[str, float]:
+            if not metric_buffer:
+                return {
+                    'ppo_loss': 0.0,
+                    'grad_norm': 0.0,
+                    'approx_kl': 0.0,
+                    'clip_frac': 0.0,
+                    'mean_ratio': 1.0,
+                    'mean_abs_ratio_dev': 0.0,
+                    'reg_loss': 0.0,
+                    'cd_loss': 0.0,
+                }
+            return {
+                'ppo_loss': float(np.mean([item['ppo_loss'] for item in metric_buffer])),
+                'grad_norm': float(np.mean([item['grad_norm'] for item in metric_buffer])),
+                'approx_kl': float(np.mean([item['approx_kl'] for item in metric_buffer])),
+                'clip_frac': float(np.mean([item['clip_frac'] for item in metric_buffer])),
+                'mean_ratio': float(np.mean([item['mean_ratio'] for item in metric_buffer])),
+                'mean_abs_ratio_dev': float(np.mean([item['mean_abs_ratio_dev'] for item in metric_buffer])),
+                'reg_loss': float(np.mean([item['reg_loss'] for item in metric_buffer])),
+                'cd_loss': float(np.mean([item['cd_loss'] for item in metric_buffer])),
+            }
 
-                with torch.no_grad():
-                    _, ppo_info_post = self.policy.compute_ppo_loss(
-                        obs_dict=None,
-                        old_log_probs=old_log_probs,
-                        advantages=advantages,
-                        trajectory=trajectories,
-                        global_cond=global_cond,
-                    )
-
-                if config.logging.use_wandb and self.global_step % config.training.log_every == 0:
-                    log_dict = {
-                        'online/ppo_loss': ppo_loss_display,
-                        'online/grad_norm': epoch_grad_norms[-1] if epoch_grad_norms else 0.0,
-                        'online/approx_kl': float(ppo_info_post.get('approx_kl', 0.0)),
-                        'online/clip_frac': float(ppo_info_post.get('clip_frac', 0.0)),
-                        'online/mean_ratio': float(ppo_info_post.get('mean_ratio', 1.0)),
-                        'online/min_ratio': float(ppo_info_post.get('min_ratio', 1.0)),
-                        'online/max_ratio': float(ppo_info_post.get('max_ratio', 1.0)),
-                        'online/mean_abs_ratio_dev': float(ppo_info_post.get('mean_abs_ratio_dev', 0.0)),
-                    }
-                    if epoch_reg_losses:
-                        log_dict['online/obs_reg_loss'] = epoch_reg_losses[-1]
-                    if epoch_cd_losses:
-                        log_dict['online/cd_loss'] = epoch_cd_losses[-1]
-                    wandb.log(log_dict, step=self.global_step)
-
-                self.global_step += 1
-                epoch_ppo_losses.append(ppo_loss_display)
-                epoch_approx_kls.append(float(ppo_info_post.get('approx_kl', 0.0)))
-                epoch_clip_fracs.append(float(ppo_info_post.get('clip_frac', 0.0)))
-                epoch_mean_ratios.append(float(ppo_info_post.get('mean_ratio', 1.0)))
-                epoch_min_ratios.append(float(ppo_info_post.get('min_ratio', 1.0)))
-                epoch_max_ratios.append(float(ppo_info_post.get('max_ratio', 1.0)))
-                epoch_mean_abs_ratio_devs.append(float(ppo_info_post.get('mean_abs_ratio_dev', 0.0)))
-
-            if epoch_ppo_losses:
-                ppo_losses.append(float(np.mean(epoch_ppo_losses)))
-            if epoch_cd_losses:
-                cd_losses.append(float(np.mean(epoch_cd_losses)))
-            if epoch_reg_losses:
-                reg_losses.append(float(np.mean(epoch_reg_losses)))
-            if epoch_grad_norms:
-                grad_norms.append(float(np.mean(epoch_grad_norms)))
-            if epoch_approx_kls:
-                approx_kls.append(float(np.mean(epoch_approx_kls)))
-            if epoch_clip_fracs:
-                clip_fracs.append(float(np.mean(epoch_clip_fracs)))
+        def _log_online_step_summary(step_idx: int, total_steps: int, summary: Dict[str, float]) -> None:
             cprint(
-                f"[Online RL] Epoch {epoch + 1}/{num_epochs}, "
-                f"PPO Loss: {np.mean(epoch_ppo_losses) if epoch_ppo_losses else 0.0:.4f}, "
-                f"PostKL: {np.mean(epoch_approx_kls) if epoch_approx_kls else 0.0:.3e}, "
-                f"PostClipFrac: {np.mean(epoch_clip_fracs) if epoch_clip_fracs else 0.0:.6f}, "
-                f"PostMeanRatio: {np.mean(epoch_mean_ratios) if epoch_mean_ratios else 1.0:.6f}, "
-                f"PostRatioDev: {np.mean(epoch_mean_abs_ratio_devs) if epoch_mean_abs_ratio_devs else 0.0:.3e}, "
-                f"GradNorm: {np.mean(epoch_grad_norms) if epoch_grad_norms else 0.0:.4f}, "
-                f"Reg Loss: {np.mean(epoch_reg_losses) if epoch_reg_losses else 0.0:.4f}, "
-                f"CD Loss: {np.mean(epoch_cd_losses) if epoch_cd_losses else 0.0:.4f}",
+                f"[Online RL] PPO Step {step_idx}/{total_steps}, "
+                f"PPO Loss: {summary['ppo_loss']:.4f}, "
+                f"PostKL: {summary['approx_kl']:.3e}, "
+                f"PostClipFrac: {summary['clip_frac']:.6f}, "
+                f"PostMeanRatio: {summary['mean_ratio']:.6f}, "
+                f"PostRatioDev: {summary['mean_abs_ratio_dev']:.3e}, "
+                f"GradNorm: {summary['grad_norm']:.4f}, "
+                f"Reg Loss: {summary['reg_loss']:.4f}, "
+                f"CD Loss: {summary['cd_loss']:.4f}",
                 "green",
             )
+
+        if num_policy_steps is not None and int(num_policy_steps) > 0:
+            num_policy_steps = int(num_policy_steps)
+            bucket_metrics = []
+            for step in range(num_policy_steps):
+                update_metrics = _online_ppo_update(_sample_rollout_indices())
+                bucket_metrics.append(update_metrics)
+                ppo_losses.append(update_metrics['ppo_loss'])
+                cd_losses.append(update_metrics['cd_loss'])
+                reg_losses.append(update_metrics['reg_loss'])
+                grad_norms.append(update_metrics['grad_norm'])
+                approx_kls.append(update_metrics['approx_kl'])
+                clip_fracs.append(update_metrics['clip_frac'])
+
+                should_flush = ((step + 1) % policy_steps_per_bucket == 0) or (step + 1 == num_policy_steps)
+                if should_flush:
+                    summary = _summarize_online_metrics(bucket_metrics)
+                    _log_online_step_summary(step + 1, num_policy_steps, summary)
+                    bucket_metrics = []
+                if _should_early_stop_online(update_metrics, step + 1):
+                    if bucket_metrics:
+                        summary = _summarize_online_metrics(bucket_metrics)
+                        _log_online_step_summary(step + 1, num_policy_steps, summary)
+                        bucket_metrics = []
+                    cprint(
+                        f"[Online RL] Early stop at PPO step {step + 1}/{num_policy_steps}: "
+                        f"{_format_online_early_stop_reason(update_metrics)}",
+                        "yellow",
+                    )
+                    break
+        else:
+            num_epochs = int(num_epochs if num_epochs is not None else 0)
+            policy_indices = np.arange(len(rollout_buffer))
+            for epoch in range(num_epochs):
+                np.random.shuffle(policy_indices)
+                epoch_metrics = []
+                for start in range(0, len(policy_indices), batch_size):
+                    idx = policy_indices[start:start + batch_size]
+                    update_metrics = _online_ppo_update(idx)
+                    epoch_metrics.append(update_metrics)
+                    ppo_losses.append(update_metrics['ppo_loss'])
+                    cd_losses.append(update_metrics['cd_loss'])
+                    reg_losses.append(update_metrics['reg_loss'])
+                    grad_norms.append(update_metrics['grad_norm'])
+                    approx_kls.append(update_metrics['approx_kl'])
+                    clip_fracs.append(update_metrics['clip_frac'])
+
+                summary = _summarize_online_metrics(epoch_metrics)
+                cprint(
+                    f"[Online RL] Epoch {epoch + 1}/{num_epochs}, "
+                    f"PPO Loss: {summary['ppo_loss']:.4f}, "
+                    f"PostKL: {summary['approx_kl']:.3e}, "
+                    f"PostClipFrac: {summary['clip_frac']:.6f}, "
+                    f"PostMeanRatio: {summary['mean_ratio']:.6f}, "
+                    f"PostRatioDev: {summary['mean_abs_ratio_dev']:.3e}, "
+                    f"GradNorm: {summary['grad_norm']:.4f}, "
+                    f"Reg Loss: {summary['reg_loss']:.4f}, "
+                    f"CD Loss: {summary['cd_loss']:.4f}",
+                    "green",
+                )
 
         iter_tag = int(online_iteration) if online_iteration is not None else 0
         online_v_plot_path = self._save_loss_curve_plot(
@@ -1820,6 +3079,7 @@ class RL100Trainer:
         env_runner: BaseRunner,
         num_offline_iterations: int = 5,
         skip_il: bool = False,
+        resume_il: bool = False,
     ):
         """
         Execute complete RL-100 pipeline (Algorithm 1).
@@ -1862,12 +3122,24 @@ class RL100Trainer:
                 self.ema_policy.to(self.device)
             cprint(f"[RL100Trainer] Normalizer synced from dataset. "
                    f"Resuming offline RL from iteration {self.offline_rl_iteration}.", "yellow")
+            if env_runner is not None and self._is_eval_enabled():
+                cprint("[RL100Trainer] Evaluating resumed DDIM policy to establish best-checkpoint baseline.", "cyan")
+                resumed_metrics = self._evaluate_current_ddim(env_runner)
+                self._maybe_update_best_ddim_checkpoint(
+                    resumed_metrics,
+                    tag='resume_loaded_policy'
+                )
         else:
-            self.train_imitation_learning(
+            il_metrics = self.train_imitation_learning(
                 dataset=initial_dataset,
                 num_epochs=config.training.il_epochs,
                 env_runner=env_runner,
-                plot_tag='initial'
+                plot_tag='initial',
+                resume_state=resume_il,
+            )
+            self._maybe_update_best_ddim_checkpoint(
+                il_metrics.get('eval_metrics'),
+                tag='after_il'
             )
             # Save IL checkpoint
             self.save_checkpoint(tag='after_il')
@@ -1907,6 +3179,15 @@ class RL100Trainer:
         if skip_il and start_iteration > 0:
             cprint(f"[RL100Trainer] Skipping offline RL iterations 0~{start_iteration - 1} "
                    f"(already completed in checkpoint).", "yellow")
+        offline_collection_enabled = (
+            bool(getattr(config.training, 'offline_collect_new_data', True))
+            and int(getattr(config.training, 'collection_episodes', 0)) > 0
+        )
+        if num_offline_iterations > 0 and not offline_collection_enabled:
+            cprint(
+                "[RL100Trainer] Offline collection is disabled; offline RL will reuse the fixed dataset without rollout/merge/IL-retrain.",
+                "yellow",
+            )
 
         for iteration in range(start_iteration, num_offline_iterations):
             self.offline_rl_iteration = iteration
@@ -1915,72 +3196,111 @@ class RL100Trainer:
             cprint(f" "*15 + f"OFFLINE RL ITERATION {iteration + 1}/{num_offline_iterations}", "yellow")
             cprint("="*80 + "\n", "yellow")
 
-            # 2a) Train Transition Model  (Algorithm 1, Line 6)
-            self.train_transition_model(
-                dataset=current_dataset,
-                max_epochs=200,
-                max_epochs_since_update=5,
-            )
+            if self._uses_ppo_backend():
+                # 2a) Train Transition Model  (Algorithm 1, Line 6)
+                transition_cfg = getattr(config, 'transition', None)
+                self.train_transition_model(
+                    dataset=current_dataset,
+                    max_epochs=int(getattr(transition_cfg, 'max_epochs',
+                                           getattr(config.training, 'transition_max_epochs', 200))),
+                    max_epochs_since_update=int(getattr(
+                        transition_cfg,
+                        'max_epochs_since_update',
+                        getattr(config.training, 'transition_patience', 5))),
+                )
 
-            # 2b) Train IQL Critics  (Algorithm 1, Line 5)
-            self.train_iql_critics(
-                dataset=current_dataset,
-                num_epochs=config.training.critic_epochs
-            )
+                # 2b) Train IQL Critics  (Algorithm 1, Line 5)
+                self.train_iql_critics(
+                    dataset=current_dataset,
+                    num_epochs=config.training.critic_epochs,
+                    num_steps=getattr(config.training, 'offline_critic_steps', None),
+                )
 
-            # 2c) Optimize Policy  (Algorithm 1, Lines 7-8)
-            # Paper Eq.17: reduce VIB betas by 10× during RL fine-tuning.
-            _apply_vib_betas(0.1)
-            self.offline_rl_optimize(
-                dataset=current_dataset,
-                num_epochs=config.training.ppo_epochs
-            )
+                # 2c) Optimize Policy  (Algorithm 1, Lines 7-8)
+                _apply_vib_betas(0.1)
+                self.offline_rl_optimize(
+                    dataset=current_dataset,
+                    num_epochs=config.training.ppo_epochs,
+                    num_steps=getattr(config.training, 'offline_ppo_steps', None),
+                )
+            elif self._uses_qam_backend():
+                self.train_qam_critics(
+                    dataset=current_dataset,
+                    num_epochs=config.training.critic_epochs,
+                    num_steps=getattr(config.training, 'offline_critic_steps', None),
+                )
+                _apply_vib_betas(0.1)
+                self.offline_qam_optimize(
+                    dataset=current_dataset,
+                    num_epochs=config.training.ppo_epochs,
+                    num_steps=getattr(config.training, 'offline_ppo_steps', None),
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported offline backend: {self.offline_policy_backend}"
+                )
 
             # 2d) Collect New Data + Merge  (Algorithm 1, Lines 10-11)
-            collection_metrics, new_episodes = self.collect_new_data(
-                env_runner=env_runner,
-                num_episodes=config.training.collection_episodes,
-                use_ema=False,
-                collect_trajectory=False,
-            )
-            self.offline_collection_success_history.append(
-                float(collection_metrics.get('mean_success_rates', 0.0))
-            )
-            offline_collection_plot_path = self._save_iteration_metric_plot(
-                metric_history=self.offline_collection_success_history,
-                title="Offline Collection Success Rate",
-                ylabel="Success Rate",
-                filename="offline_collection_success_rate.png",
-            )
-            if config.logging.use_wandb and offline_collection_plot_path is not None:
-                wandb.log({
-                    'collection/offline_success_curve': wandb.Image(offline_collection_plot_path),
-                }, step=self.global_step)
-            il_episode_mask_new = self._build_il_episode_mask(new_episodes, stage='offline collection')
-
-            # Algorithm 1 Line 11: D_{m+1} = D_m ∪ D_new
-            if new_episodes:
-                n_new = current_dataset.merge_episodes(
-                    new_episodes,
-                    il_episode_mask_new=il_episode_mask_new,
+            new_episodes = []
+            if offline_collection_enabled:
+                collection_metrics, new_episodes = self.collect_new_data(
+                    env_runner=env_runner,
+                    num_episodes=config.training.collection_episodes,
+                    use_ema=False,
+                    collect_trajectory=True,
                 )
-                cprint(f"[Dataset] Merged {len(new_episodes)} episodes "
-                       f"({n_new} steps) → total {current_dataset.replay_buffer.n_steps} steps, "
-                       f"{current_dataset.replay_buffer.n_episodes} episodes", "cyan")
+                self.offline_collection_success_history.append(
+                    float(collection_metrics.get('mean_success_rates', 0.0))
+                )
+                offline_collection_plot_path = self._save_iteration_metric_plot(
+                    metric_history=self.offline_collection_success_history,
+                    title="Offline Collection Success Rate",
+                    ylabel="Success Rate",
+                    filename="offline_collection_success_rate.png",
+                )
+                if config.logging.use_wandb and offline_collection_plot_path is not None:
+                    wandb.log({
+                        'collection/offline_success_curve': wandb.Image(offline_collection_plot_path),
+                    }, step=self.global_step)
+                il_episode_mask_new = self._build_il_episode_mask(new_episodes, stage='offline collection')
+
+                # Algorithm 1 Line 11: D_{m+1} = D_m ∪ D_new
+                if new_episodes:
+                    n_new = current_dataset.merge_episodes(
+                        new_episodes,
+                        il_episode_mask_new=il_episode_mask_new,
+                    )
+                    cprint(f"[Dataset] Merged {len(new_episodes)} episodes "
+                           f"({n_new} steps) → total {current_dataset.replay_buffer.n_steps} steps, "
+                           f"{current_dataset.replay_buffer.n_episodes} episodes", "cyan")
 
             # 2e) Retrain IL (optional) — Algorithm 1 Line 13
-            if config.training.retrain_il_after_collection:
+            if config.training.retrain_il_after_collection and new_episodes:
                 # Paper Eq.17: restore VIB betas to original values for IL re-training.
                 # The 10× reduction only applies to RL fine-tuning (OfflineRL step).
                 _apply_vib_betas(1.0)
                 cprint(f"\n[RL100Trainer] Retraining IL on merged dataset...", "cyan")
                 il_dataset = current_dataset.get_il_training_dataset() \
                     if hasattr(current_dataset, 'get_il_training_dataset') else current_dataset
-                self.train_imitation_learning(
+                il_metrics = self.train_imitation_learning(
                     dataset=il_dataset,
                     num_epochs=config.training.il_retrain_epochs,
                     env_runner=env_runner,
                     plot_tag=f"retrain_iter_{int(iteration):02d}"
+                )
+                self._maybe_update_best_ddim_checkpoint(
+                    il_metrics.get('eval_metrics'),
+                    tag=f'offline_iter_{iteration}'
+                )
+            elif config.training.retrain_il_after_collection and not offline_collection_enabled:
+                cprint(
+                    "[RL100Trainer] Skipping IL retraining because offline collection is disabled.",
+                    "yellow",
+                )
+            elif config.training.retrain_il_after_collection:
+                cprint(
+                    "[RL100Trainer] Skipping IL retraining because no new offline episodes were collected.",
+                    "yellow",
                 )
 
             # Save checkpoint
@@ -1990,6 +3310,10 @@ class RL100Trainer:
         # Phase 3: Online RL Fine-tuning (Optional)
         # ============================================
         if config.training.run_online_rl:
+            if self._uses_qam_backend():
+                raise NotImplementedError(
+                    "online RL with training.offline_policy_backend=qam is not implemented in this integration."
+                )
             cprint("\n" + "="*80, "green")
             cprint(" "*20 + "PHASE 3: ONLINE RL FINE-TUNING", "green")
             cprint("="*80 + "\n", "green")
@@ -2039,15 +3363,40 @@ class RL100Trainer:
                 self.online_rl_optimize(
                     online_episodes=online_episodes,
                     num_epochs=min(20, config.training.ppo_epochs),
+                    num_value_steps=getattr(config.training, 'online_value_steps', None),
+                    num_policy_steps=getattr(config.training, 'online_ppo_steps', None),
                     online_iteration=online_iter,
                 )
                 _apply_vib_betas(1.0)
+
+                if self._is_eval_enabled():
+                    eval_metrics = self._evaluate_current_ddim(env_runner)
+                    eval_score = self._extract_eval_score(eval_metrics)
+                    if eval_score is not None:
+                        self.online_eval_score_history.append(eval_score)
+                        online_eval_plot_path = self._save_iteration_metric_plot(
+                            metric_history=self.online_eval_score_history,
+                            title="Online Eval DDIM Score",
+                            ylabel="Success Rate",
+                            filename="online_eval_ddim_score.png",
+                        )
+                        if config.logging.use_wandb:
+                            log_dict = {'eval/online_ddim_score': eval_score}
+                            if online_eval_plot_path is not None:
+                                log_dict['eval/online_ddim_curve'] = wandb.Image(online_eval_plot_path)
+                            wandb.log(log_dict, step=self.global_step)
+                        self._maybe_update_best_ddim_checkpoint(
+                            eval_metrics,
+                            tag=f'online_iter_{online_iter}'
+                        )
 
                 self.save_checkpoint(tag=f'online_iter_{online_iter}')
 
         cprint("\n" + "="*80, "magenta")
         cprint(" "*25 + "TRAINING COMPLETE!", "magenta")
         cprint("="*80 + "\n", "magenta")
+
+        self._select_verified_final_ddim_checkpoint(env_runner)
 
         # Save final checkpoint
         self.save_checkpoint(tag='final')
@@ -2059,17 +3408,28 @@ class RL100Trainer:
 
         checkpoint = {
             'policy': self.policy.state_dict(),
-            'critics': self.critics.state_dict(),
-            'consistency_model': self.consistency_model.state_dict(),
-            'transition_model': self.transition_model.state_dict(),
             'policy_optimizer': self.policy_optimizer.state_dict(),
-            'v_optimizer': self.v_optimizer.state_dict(),
-            'q_optimizer': self.q_optimizer.state_dict(),
-            'consistency_optimizer': self.consistency_optimizer.state_dict(),
             'global_step': self.global_step,
             'epoch': self.epoch,
             'offline_rl_iteration': self.offline_rl_iteration,
+            'offline_policy_backend': self.offline_policy_backend,
+            'generative_mode': self.generative_mode,
         }
+
+        if self.critics is not None:
+            checkpoint['critics'] = self.critics.state_dict()
+        if self.qam_critics is not None:
+            checkpoint['qam_critics'] = self.qam_critics.state_dict()
+        if self.consistency_model is not None:
+            checkpoint['consistency_model'] = self.consistency_model.state_dict()
+        if self.transition_model is not None:
+            checkpoint['transition_model'] = self.transition_model.state_dict()
+        if self.v_optimizer is not None:
+            checkpoint['v_optimizer'] = self.v_optimizer.state_dict()
+        if self.q_optimizer is not None:
+            checkpoint['q_optimizer'] = self.q_optimizer.state_dict()
+        if self.consistency_optimizer is not None:
+            checkpoint['consistency_optimizer'] = self.consistency_optimizer.state_dict()
 
         if self.ema_policy is not None:
             checkpoint['ema_policy'] = self.ema_policy.state_dict()
@@ -2112,7 +3472,7 @@ class RL100Trainer:
                 "yellow",
             )
 
-    def load_checkpoint(self, path: str):
+    def load_checkpoint(self, path: str, load_rl_state: bool = True):
         """Load checkpoint."""
         checkpoint = torch.load(path, map_location=self.device)
 
@@ -2128,9 +3488,29 @@ class RL100Trainer:
             cprint(f"[Checkpoint] policy: {len(unexpected)} unexpected key(s) "
                    f"(ignored): {unexpected[:3]}{'...' if len(unexpected)>3 else ''}", "yellow")
 
-        self._load_matching_state_dict(self.critics, checkpoint['critics'], 'critics')
-        self._load_matching_state_dict(self.consistency_model, checkpoint['consistency_model'], 'consistency_model')
-        if 'transition_model' in checkpoint:
+        if 'ema_policy' in checkpoint and self.ema_policy is not None:
+            self.ema_policy.load_state_dict(checkpoint['ema_policy'], strict=False)
+        if 'ema_helper' in checkpoint and self.ema_policy is not None and hasattr(self, 'ema'):
+            self.ema.decay = checkpoint['ema_helper'].get('decay', self.ema.decay)
+            self.ema.optimization_step = checkpoint['ema_helper'].get('optimization_step', self.ema.optimization_step)
+
+        if not load_rl_state:
+            self.global_step = int(checkpoint.get('global_step', 0))
+            self.epoch = 0
+            self.offline_rl_iteration = 0
+            cprint(
+                "[Checkpoint] Loaded policy/EMA only; RL heads and optimizers keep fresh initialization.",
+                "green",
+            )
+            return
+
+        if self.critics is not None and 'critics' in checkpoint:
+            self._load_matching_state_dict(self.critics, checkpoint['critics'], 'critics')
+        if self.qam_critics is not None and 'qam_critics' in checkpoint:
+            self._load_matching_state_dict(self.qam_critics, checkpoint['qam_critics'], 'qam_critics')
+        if self.consistency_model is not None and 'consistency_model' in checkpoint:
+            self._load_matching_state_dict(self.consistency_model, checkpoint['consistency_model'], 'consistency_model')
+        if self.transition_model is not None and 'transition_model' in checkpoint:
             try:
                 self.transition_model.load_state_dict(checkpoint['transition_model'])
             except Exception as e:
@@ -2145,24 +3525,21 @@ class RL100Trainer:
             self.policy_optimizer.load_state_dict(checkpoint['policy_optimizer'])
         except Exception as e:
             cprint(f"[Checkpoint] policy_optimizer not restored ({type(e).__name__}: {e})", "yellow")
-        try:
-            self.v_optimizer.load_state_dict(checkpoint['v_optimizer'])
-        except Exception as e:
-            cprint(f"[Checkpoint] v_optimizer not restored ({type(e).__name__}: {e})", "yellow")
-        try:
-            self.q_optimizer.load_state_dict(checkpoint['q_optimizer'])
-        except Exception as e:
-            cprint(f"[Checkpoint] q_optimizer not restored ({type(e).__name__}: {e})", "yellow")
-        try:
-            self.consistency_optimizer.load_state_dict(checkpoint['consistency_optimizer'])
-        except Exception as e:
-            cprint(f"[Checkpoint] consistency_optimizer not restored ({type(e).__name__}: {e})", "yellow")
-
-        if 'ema_policy' in checkpoint and self.ema_policy is not None:
-            self.ema_policy.load_state_dict(checkpoint['ema_policy'], strict=False)
-        if 'ema_helper' in checkpoint and self.ema_policy is not None and hasattr(self, 'ema'):
-            self.ema.decay = checkpoint['ema_helper'].get('decay', self.ema.decay)
-            self.ema.optimization_step = checkpoint['ema_helper'].get('optimization_step', self.ema.optimization_step)
+        if self.v_optimizer is not None and 'v_optimizer' in checkpoint:
+            try:
+                self.v_optimizer.load_state_dict(checkpoint['v_optimizer'])
+            except Exception as e:
+                cprint(f"[Checkpoint] v_optimizer not restored ({type(e).__name__}: {e})", "yellow")
+        if self.q_optimizer is not None and 'q_optimizer' in checkpoint:
+            try:
+                self.q_optimizer.load_state_dict(checkpoint['q_optimizer'])
+            except Exception as e:
+                cprint(f"[Checkpoint] q_optimizer not restored ({type(e).__name__}: {e})", "yellow")
+        if self.consistency_optimizer is not None and 'consistency_optimizer' in checkpoint:
+            try:
+                self.consistency_optimizer.load_state_dict(checkpoint['consistency_optimizer'])
+            except Exception as e:
+                cprint(f"[Checkpoint] consistency_optimizer not restored ({type(e).__name__}: {e})", "yellow")
 
         self.global_step = checkpoint['global_step']
         self.epoch = checkpoint['epoch']

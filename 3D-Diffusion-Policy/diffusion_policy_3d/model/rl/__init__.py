@@ -24,6 +24,7 @@ from diffusion_policy_3d.model.rl.consistency_model import (
     ConsistencyModel,
     ConsistencyDistillation
 )
+from diffusion_policy_3d.model.rl.qam_critics import QAMCritics
 
 
 from diffusion_policy_3d.model.rl.transition_model import TransitionModel
@@ -35,5 +36,6 @@ __all__ = [
     'MLP',
     'ConsistencyModel',
     'ConsistencyDistillation',
+    'QAMCritics',
     'TransitionModel'
 ]

@@ -16,7 +16,7 @@ from diffusion_policy_3d.model.diffusion.simple_conditional_unet1d import Condit
 from diffusion_policy_3d.model.diffusion.mask_generator import LowdimMaskGenerator
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 from diffusion_policy_3d.common.model_util import print_params
-from diffusion_policy_3d.model.vision.pointnet_extractor import DP3Encoder
+from diffusion_policy_3d.model.vision.multimodal_obs_encoder import MultiModalObsEncoder
 
 class SimpleDP3(BasePolicy):
     def __init__(self, 
@@ -57,16 +57,15 @@ class SimpleDP3(BasePolicy):
             raise NotImplementedError(f"Unsupported action shape {action_shape}")
             
         obs_shape_meta = shape_meta['obs']
-        obs_dict = dict_apply(obs_shape_meta, lambda x: x['shape'])
 
-
-        obs_encoder = DP3Encoder(observation_space=obs_dict,
-                                                   img_crop_shape=crop_shape,
-                                                out_channel=encoder_output_dim,
-                                                pointcloud_encoder_cfg=pointcloud_encoder_cfg,
-                                                use_pc_color=use_pc_color,
-                                                pointnet_type=pointnet_type,
-                                                )
+        obs_encoder = MultiModalObsEncoder(
+            observation_space=obs_shape_meta,
+            img_crop_shape=crop_shape,
+            out_channel=encoder_output_dim,
+            pointcloud_encoder_cfg=pointcloud_encoder_cfg,
+            use_pc_color=use_pc_color,
+            pointnet_type=pointnet_type,
+        )
 
         # create diffusion model
         obs_feature_dim = obs_encoder.output_shape()
@@ -180,12 +179,7 @@ class SimpleDP3(BasePolicy):
         """
         # normalize input
         nobs = self.normalizer.normalize(obs_dict)
-        # this_n_point_cloud = nobs['imagin_robot'][..., :3] # only use coordinate
-        if not self.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-        this_n_point_cloud = nobs['point_cloud']
-        
-        
+
         value = next(iter(nobs.values()))
         B, To = value.shape[:2]
         T = self.horizon
@@ -259,10 +253,6 @@ class SimpleDP3(BasePolicy):
         # normalize input
         nobs = self.normalizer.normalize(batch['obs'])
         nactions = self.normalizer['action'].normalize(batch['action'])
-
-        if not self.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-        
         
         batch_size = nactions.shape[0]
         horizon = nactions.shape[1]
@@ -287,9 +277,6 @@ class SimpleDP3(BasePolicy):
             else:
                 # reshape back to B, Do
                 global_cond = nobs_features.reshape(batch_size, -1)
-            # this_n_point_cloud = this_nobs['imagin_robot'].reshape(batch_size,-1, *this_nobs['imagin_robot'].shape[1:])
-            this_n_point_cloud = this_nobs['point_cloud'].reshape(batch_size,-1, *this_nobs['point_cloud'].shape[1:])
-            this_n_point_cloud = this_n_point_cloud[..., :3]
         else:
             # reshape B, T, ... to B*T
             this_nobs = dict_apply(nobs, lambda x: x.reshape(-1, *x.shape[2:]))
@@ -372,4 +359,3 @@ class SimpleDP3(BasePolicy):
         # print(f"t6-t5: {t6-t5:.3f}")
         
         return loss, loss_dict
-

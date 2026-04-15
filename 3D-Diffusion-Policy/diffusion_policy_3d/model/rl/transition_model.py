@@ -153,7 +153,10 @@ class EnsembleDynamicsModel(nn.Module):
 
         if weight_decays is None:
             # Default weight decays from Uni-O4 (one per layer including output)
-            weight_decays = (2.5e-5,) * len(hidden_dims) + (1e-4,)
+            if len(hidden_dims) == 4:
+                weight_decays = (2.5e-5, 5e-5, 7.5e-5, 7.5e-5, 1e-4)
+            else:
+                weight_decays = (2.5e-5,) * len(hidden_dims) + (1e-4,)
         assert len(weight_decays) == len(hidden_dims) + 1, \
             "Need one weight_decay value per layer (hidden + output)"
 
@@ -237,6 +240,8 @@ class TransitionModel:
         hidden_dims: Tuple[int, ...] = (200, 200, 200, 200),
         num_ensemble: int = 7,
         num_elites: int = 5,
+        lr: float = 1e-3,
+        weight_decays: Optional[Tuple[float, ...]] = None,
         device: str = 'cuda',
     ) -> None:
         self.obs_feature_dim = obs_feature_dim
@@ -249,9 +254,10 @@ class TransitionModel:
             hidden_dims=hidden_dims,
             num_ensemble=num_ensemble,
             num_elites=num_elites,
+            weight_decays=weight_decays,
         ).to(self.device)
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.scaler = StandardScaler()
 
     # ------------------------------------------------------------------
@@ -295,15 +301,20 @@ class TransitionModel:
                     for k, v in batch['obs'].items()
                 }
                 action = policy.extract_action_chunk(batch['action'].to(self.device))
+                executed_action_steps = batch.get('executed_action_steps', None)
+                if executed_action_steps is not None:
+                    executed_action_steps = executed_action_steps.to(self.device, non_blocking=True)
                 reward = batch.get('reward', None)
                 if reward is not None:
                     reward = reward.to(self.device)
 
                 # Normalize
                 nobs = policy.normalizer.normalize(obs_dict)
-                if not policy.use_pc_color:
-                    nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-                naction = policy.normalizer['action'].normalize(action).reshape(action.shape[0], -1)
+                naction = policy.normalizer['action'].normalize(action)
+                naction = policy.mask_action_chunk(
+                    naction,
+                    executed_action_steps=executed_action_steps,
+                ).reshape(action.shape[0], -1)
 
                 B = action.shape[0]
 
@@ -320,8 +331,6 @@ class TransitionModel:
                     for k, v in batch['next_obs'].items()
                 }
                 nxt_nobs = policy.normalizer.normalize(next_obs_raw)
-                if not policy.use_pc_color:
-                    nxt_nobs['point_cloud'] = nxt_nobs['point_cloud'][..., :3]
                 nxt_nobs = dict_apply(
                     nxt_nobs,
                     lambda x: x[:, :policy.n_obs_steps].reshape(-1, *x.shape[2:])

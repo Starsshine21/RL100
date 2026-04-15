@@ -1,0 +1,38 @@
+defaults:
+  - rl100
+  - override task: realrobot_pick_place_dexcollector
+  - _self_
+
+name: train_rl100_qam_pick_place_dexcollector
+exp_name: qam_pick_place_dexcollector
+
+policy:
+  generative_mode: flow_matching
+  flow_sampling_steps: 8
+  down_dims: [256, 512, 1024]
+  obs_mode: ${task.obs_mode}
+  use_mask: ${task.use_mask}
+  use_right_cam_img: ${task.use_right_cam_img}
+  rgb_encoder_type: dp_resnet
+  rgb_encoder_cfg:
+    crop_shape:
+      - ${task.image_height}
+      - ${task.image_width}
+    stage_channels: [32, 64, 128, 256]
+    blocks_per_stage: 2
+    use_group_norm: true
+
+training:
+  offline_policy_backend: qam
+  run_online_rl: false
+  resume: false
+  num_offline_iterations: 1
+  collection_episodes: 1
+
+dataloader:
+  batch_size: 32
+  num_workers: 4
+
+runtime:
+  collection_policy: flow
+  collection_use_ema: false

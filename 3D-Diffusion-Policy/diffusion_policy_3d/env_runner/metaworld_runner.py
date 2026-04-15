@@ -1,8 +1,9 @@
 import wandb
 import numpy as np
 import torch
-import collections
 import tqdm
+import collections
+import random
 from diffusion_policy_3d.env import MetaWorldEnv
 from diffusion_policy_3d.gym_util.multistep_wrapper import MultiStepWrapper
 from diffusion_policy_3d.gym_util.video_recording_wrapper import SimpleVideoRecordingWrapper
@@ -10,7 +11,6 @@ from diffusion_policy_3d.gym_util.video_recording_wrapper import SimpleVideoReco
 from diffusion_policy_3d.policy.base_policy import BasePolicy
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 from diffusion_policy_3d.env_runner.base_runner import BaseRunner
-import diffusion_policy_3d.common.logger_util as logger_util
 from termcolor import cprint
 
 class MetaworldRunner(BaseRunner):
@@ -30,17 +30,25 @@ class MetaworldRunner(BaseRunner):
                  n_test=None,
                  device="cuda:0",
                  use_point_crop=True,
-                 num_points=512
+                 use_pc_color=False,
+                 point_sampling_method='fps',
+                 num_points=None,
+                 seed=None
                  ):
         super().__init__(output_dir)
         self.task_name = task_name
+        self.seed = None if seed is None else int(seed)
 
 
         def env_fn(task_name):
             return MultiStepWrapper(
                 SimpleVideoRecordingWrapper(
                     MetaWorldEnv(task_name=task_name,device=device, 
-                                 use_point_crop=use_point_crop, num_points=num_points)),
+                                 use_point_crop=use_point_crop,
+                                 use_pc_color=use_pc_color,
+                                 point_sampling_method=point_sampling_method,
+                                 num_points=num_points,
+                                 seed=self.seed)),
                 n_obs_steps=n_obs_steps,
                 n_action_steps=n_action_steps,
                 max_episode_steps=max_steps,
@@ -56,8 +64,33 @@ class MetaworldRunner(BaseRunner):
         self.max_steps = max_steps
         self.tqdm_interval_sec = tqdm_interval_sec
 
-        self.logger_util_test = logger_util.LargestKRecorder(K=3)
-        self.logger_util_test10 = logger_util.LargestKRecorder(K=5)
+    def _capture_rng_state(self):
+        state = {
+            'numpy': np.random.get_state(),
+            'python': random.getstate(),
+            'torch': torch.get_rng_state(),
+        }
+        if torch.cuda.is_available():
+            state['torch_cuda'] = torch.cuda.get_rng_state_all()
+        return state
+
+    def _restore_rng_state(self, state):
+        np.random.set_state(state['numpy'])
+        random.setstate(state['python'])
+        torch.set_rng_state(state['torch'])
+        if 'torch_cuda' in state and torch.cuda.is_available():
+            torch.cuda.set_rng_state_all(state['torch_cuda'])
+
+    def _seed_policy_rng(self, seed: int):
+        torch.manual_seed(int(seed))
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(int(seed))
+
+    def _seed_env(self, env, seed: int):
+        try:
+            env.seed(int(seed))
+        except Exception:
+            pass
 
     def run(self, policy: BasePolicy, save_video=False):
         device = policy.device
@@ -66,45 +99,58 @@ class MetaworldRunner(BaseRunner):
         all_traj_rewards = []
         all_success_rates = []
         env = self.env
+        rng_state = self._capture_rng_state() if self.seed is not None else None
 
-        
-        for episode_idx in tqdm.tqdm(range(self.eval_episodes), desc=f"Eval in Metaworld {self.task_name} Pointcloud Env", leave=False, mininterval=self.tqdm_interval_sec):
-            
-            # start rollout
-            obs = env.reset()
-            policy.reset()
+        try:
+            for episode_idx in tqdm.tqdm(range(self.eval_episodes), desc=f"Eval in Metaworld {self.task_name} Pointcloud Env", leave=False, mininterval=self.tqdm_interval_sec):
+                if self.seed is not None:
+                    episode_seed = int(self.seed + episode_idx * 100003)
+                    self._seed_env(env, episode_seed)
+                else:
+                    episode_seed = None
 
-            done = False
-            traj_reward = 0
-            is_success = False
-            while not done:
-                np_obs_dict = dict(obs)
-                obs_dict = dict_apply(np_obs_dict,
-                                      lambda x: torch.from_numpy(x).to(
-                                          device=device))
+                # start rollout
+                obs = env.reset()
+                policy.reset()
 
-                with torch.no_grad():
-                    obs_dict_input = {}
-                    obs_dict_input['point_cloud'] = obs_dict['point_cloud'].unsqueeze(0)
-                    obs_dict_input['agent_pos'] = obs_dict['agent_pos'].unsqueeze(0)
-                    action_dict = policy.predict_action(obs_dict_input)
+                done = False
+                traj_reward = 0
+                is_success = False
+                decision_step = 0
+                while not done:
+                    np_obs_dict = dict(obs)
+                    obs_dict = dict_apply(np_obs_dict,
+                                          lambda x: torch.from_numpy(x).to(
+                                              device=device))
 
-                np_action_dict = dict_apply(action_dict,
-                                            lambda x: x.detach().to('cpu').numpy())
-                action = np_action_dict['action'].squeeze(0)
+                    if episode_seed is not None:
+                        action_seed = int(episode_seed + decision_step * 1009)
+                        self._seed_policy_rng(action_seed)
 
-                obs, reward, done, info = env.step(action)
+                    with torch.no_grad():
+                        obs_dict_input = {}
+                        obs_dict_input['point_cloud'] = obs_dict['point_cloud'].unsqueeze(0)
+                        obs_dict_input['agent_pos'] = obs_dict['agent_pos'].unsqueeze(0)
+                        action_dict = policy.predict_action(obs_dict_input)
+
+                    np_action_dict = dict_apply(action_dict,
+                                                lambda x: x.detach().to('cpu').numpy())
+                    action = np_action_dict['action'].squeeze(0)
+
+                    obs, reward, done, info = env.step(action)
 
 
-                traj_reward += reward
-                done = np.all(done)
-                is_success = is_success or max(info['success'])
+                    traj_reward += reward
+                    done = np.all(done)
+                    is_success = is_success or max(info['success'])
+                    decision_step += 1
 
-            all_success_rates.append(is_success)
-            all_traj_rewards.append(traj_reward)
-            
+                all_success_rates.append(is_success)
+                all_traj_rewards.append(traj_reward)
+        finally:
+            if rng_state is not None:
+                self._restore_rng_state(rng_state)
 
-        max_rewards = collections.defaultdict(list)
         log_data = dict()
 
         log_data['mean_traj_rewards'] = np.mean(all_traj_rewards)
@@ -113,12 +159,6 @@ class MetaworldRunner(BaseRunner):
         log_data['test_mean_score'] = np.mean(all_success_rates)
         
         cprint(f"test_mean_score: {np.mean(all_success_rates)}", 'green')
-
-        self.logger_util_test.record(np.mean(all_success_rates))
-        self.logger_util_test10.record(np.mean(all_success_rates))
-        log_data['SR_test_L3'] = self.logger_util_test.average_of_largest_K()
-        log_data['SR_test_L5'] = self.logger_util_test10.average_of_largest_K()
-        
 
         videos = env.env.get_video()
         if len(videos.shape) == 5:
@@ -210,18 +250,16 @@ class MetaworldRunner(BaseRunner):
                     'agent_pos': state_stack.astype(np.float32),
                 }
                 trajectory = None
-                log_probs_old = None
-                if 'trajectory' in action_dict and 'log_probs_old' in action_dict:
+                trajectory_tensors = None
+                if 'trajectory' in action_dict:
+                    trajectory_tensors = [traj.detach().clone() for traj in action_dict['trajectory']]
                     trajectory = np.stack(
                         [traj.squeeze(0).detach().cpu().numpy().astype(np.float32)
                          for traj in action_dict['trajectory']],
                         axis=0,
                     )
-                    log_probs_old = np.stack(
-                        [log_prob.squeeze(0).detach().cpu().numpy().astype(np.float32)
-                         for log_prob in action_dict['log_probs_old']],
-                        axis=0,
-                    )
+                log_probs_old = None
+                executed_action_steps = 0
 
                 # Execute the chunk open-loop but record per-step transitions.
                 for act in np_action:
@@ -258,6 +296,7 @@ class MetaworldRunner(BaseRunner):
                         'agent_pos': obs['agent_pos'].copy(),
                         'point_cloud': obs['point_cloud'].copy(),
                     })
+                    executed_action_steps += 1
                     step_count += 1
                     if step_count >= self.max_steps and not done:
                         done = True
@@ -267,7 +306,7 @@ class MetaworldRunner(BaseRunner):
                 if reward_type == 'sparse' and chunk_done and is_success and chunk_step_rewards:
                     chunk_step_rewards[-1] = np.float32(1.0)
 
-                if np_action.shape[0] > 0:
+                if executed_action_steps > 0:
                     next_pc_stack = np.stack([o['point_cloud'] for o in obs_queue], axis=0).astype(np.float32)
                     next_state_stack = np.stack([o['agent_pos'] for o in obs_queue], axis=0).astype(np.float32)
                     chunk_discount = np.array(
@@ -277,17 +316,45 @@ class MetaworldRunner(BaseRunner):
                     decision_reward = float(np.dot(chunk_discount, np.asarray(chunk_step_rewards, dtype=np.float32)))
                     decision_step = {
                         'obs': decision_obs,
-                        'action': np_action.astype(np.float32),
+                        'action': np_action[:executed_action_steps].astype(np.float32),
                         'reward': np.float32(decision_reward),
                         'done': np.float32(chunk_done),
+                        'executed_action_steps': np.int64(executed_action_steps),
                         'next_obs': {
                             'point_cloud': next_pc_stack,
                             'agent_pos': next_state_stack,
                         },
                     }
-                    if trajectory is not None and log_probs_old is not None:
+                    if trajectory is not None:
                         decision_step['trajectory'] = trajectory
-                        decision_step['log_probs_old'] = log_probs_old
+                        if trajectory_tensors is not None and hasattr(policy, 'compute_trajectory_log_probs'):
+                            with torch.no_grad():
+                                log_prob_tensors = policy.compute_trajectory_log_probs(
+                                    obs_dict=obs_dict_input,
+                                    trajectory=trajectory_tensors,
+                                    executed_action_steps=torch.as_tensor(
+                                        [executed_action_steps],
+                                        device=device,
+                                        dtype=torch.long,
+                                    ),
+                                )
+                            log_probs_old = np.stack(
+                                [
+                                    log_prob.squeeze(0).detach().cpu().numpy().astype(np.float32)
+                                    for log_prob in log_prob_tensors
+                                ],
+                                axis=0,
+                            )
+                        elif 'log_probs_old' in action_dict:
+                            log_probs_old = np.stack(
+                                [
+                                    log_prob.squeeze(0).detach().cpu().numpy().astype(np.float32)
+                                    for log_prob in action_dict['log_probs_old']
+                                ],
+                                axis=0,
+                            )
+                        if log_probs_old is not None:
+                            decision_step['log_probs_old'] = log_probs_old
                     decision_steps.append(decision_step)
 
             # Sparse: 1 at last step only if successful

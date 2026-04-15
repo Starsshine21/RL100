@@ -1,0 +1,38 @@
+defaults:
+  - rl100_qam_pick_place
+  - _self_
+
+name: train_rl100_qam_pick_place_ur5e
+exp_name: qam_pick_place_ur5e_realrobot
+
+training:
+  num_offline_iterations: 1
+  collection_episodes: 1
+
+task:
+  env_runner:
+    eval_episodes: 1
+    env:
+      _target_: diffusion_policy_3d.env.real_robot.ur5e_inspire_dualcam_env.UR5eInspireDualCamEnv
+      shape_meta: ${task.shape_meta}
+      robot_ip: ${oc.env:UR5E_IP,192.168.1.109}
+      hand_port: ${oc.env:INSPIRE_HAND_PORT,/dev/ttyUSB0}
+      arm_action_mode: eef
+      arm_state_mode: eef
+      hand_encoding: normalized_minus1_1
+      hand_norm_center: 1000.0
+      hand_norm_scale: 1000.0
+      low_level_control_hz: 100
+      high_level_step_hz: 20
+      action_interp_steps: 5
+      arm_acceleration: 0.1
+      arm_speed: 0.1
+      arm_low_pass_alpha: null
+      head_camera_type: orbbec_femto_bolt
+      wrist_camera_type: l515
+      convert_bgr_to_rgb: false
+      head_mask_mode: zeros
+      manual_reset: true
+      reset_prompt: "[UR5eInspireDualCamEnv] Reset pick-place scene, then press Enter to start the next rollout."
+      reset_settle_sec: 0.5
+      step_settle_sec: 0.0

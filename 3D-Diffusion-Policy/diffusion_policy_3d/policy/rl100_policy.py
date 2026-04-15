@@ -127,8 +127,6 @@ class RL100Policy(DP3):
         """
         batch_size = next(iter(obs_dict.values())).shape[0]
         nobs = self.normalizer.normalize(obs_dict)
-        if not self.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
 
         this_nobs = dict_apply(
             nobs,
@@ -159,8 +157,6 @@ class RL100Policy(DP3):
             return zero, zero_info
 
         nobs = self.normalizer.normalize(obs_dict)
-        if not self.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
 
         this_nobs = dict_apply(
             nobs,
@@ -235,7 +231,8 @@ class RL100Policy(DP3):
         self,
         x: torch.Tensor,
         mean: torch.Tensor,
-        variance: torch.Tensor
+        variance: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Compute log probability of x under Gaussian N(mean, variance).
@@ -253,16 +250,34 @@ class RL100Policy(DP3):
         # Keep variance as [B] for consistent broadcasting
         variance = variance.view(-1)  # [B]
 
-        # Dimensionality
-        d = x.shape[1] * x.shape[2]  # T * D
+        if mask is None:
+            d = torch.full(
+                (x.shape[0],),
+                float(x.shape[1] * x.shape[2]),
+                device=x.device,
+                dtype=x.dtype,
+            )
+            sq_error = torch.sum((x - mean) ** 2, dim=[1, 2])
+        else:
+            mask = mask.to(device=x.device, dtype=x.dtype)
+            d = mask.sum(dim=[1, 2]).clamp_min(1.0)
+            sq_error = torch.sum(((x - mean) ** 2) * mask, dim=[1, 2])
 
         # Compute log prob — all terms are [B]
         log_prob = -0.5 * (
             d * torch.log(2 * torch.pi * variance) +
-            torch.sum((x - mean) ** 2, dim=[1, 2]) / variance
+            sq_error / variance
         )
 
         return log_prob
+
+    def _extract_log_prob_region(self, trajectory: torch.Tensor) -> torch.Tensor:
+        """
+        RL-100's chunked Meta-World setting treats the executed action chunk as
+        one environment decision. The PPO ratio should therefore be computed on
+        that chunk, not on the full planning horizon produced by DP3.
+        """
+        return self.extract_action_chunk(trajectory)
 
     def denoising_step_with_log_prob(
         self,
@@ -270,7 +285,9 @@ class RL100Policy(DP3):
         t: torch.Tensor,
         t_prev: torch.Tensor,
         global_cond: torch.Tensor,
-        return_mean: bool = True
+        executed_action_steps: Optional[torch.Tensor] = None,
+        return_mean: bool = True,
+        generator: Optional[torch.Generator] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Perform one DDIM denoising step t → t_prev and compute log probability.
@@ -337,9 +354,19 @@ class RL100Policy(DP3):
         )
         mean = torch.sqrt(alpha_t_prev) * pred_x0 + noise_coeff * noise_pred
 
-        # Sample x_{t_prev} = μ + σ·ε  (no noise at final step)
+        # Sample x_{t_prev} = μ + σ·ε  (no noise at final step).
+        # Allow a caller-provided generator so OPE can use common random
+        # numbers and evaluate the exact same stochastic DDIM policy that PPO
+        # optimizes.
         is_final_step = (t_prev_tensor < 0).view(-1, 1, 1)
-        noise = torch.randn_like(x_t)
+        if generator is None:
+            noise = torch.randn_like(x_t)
+        else:
+            noise = torch.randn(
+                x_t.shape,
+                generator=generator,
+                dtype=x_t.dtype,
+            ).to(x_t.device)
         x_t_prev = torch.where(
             is_final_step,
             mean,
@@ -351,7 +378,17 @@ class RL100Policy(DP3):
         if torch.all(t_prev_tensor < 0):
             log_prob = torch.zeros(x_t.shape[0], device=x_t.device, dtype=x_t.dtype)
         else:
-            log_prob = self.compute_gaussian_log_prob(x_t_prev, mean, variance)
+            log_prob_mask = self.get_action_chunk_mask(
+                x_t_prev,
+                executed_action_steps=executed_action_steps,
+                dtype=x_t.dtype,
+            )
+            log_prob = self.compute_gaussian_log_prob(
+                self._extract_log_prob_region(x_t_prev),
+                self._extract_log_prob_region(mean),
+                variance,
+                mask=log_prob_mask,
+            )
 
         if return_mean:
             return x_t_prev, log_prob, mean
@@ -364,6 +401,9 @@ class RL100Policy(DP3):
         condition_mask: torch.Tensor,
         global_cond: torch.Tensor,
         return_trajectory: bool = True,
+        initial_noise: Optional[torch.Tensor] = None,
+        generator: Optional[torch.Generator] = None,
+        executed_action_steps: Optional[torch.Tensor] = None,
         **kwargs
     ) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor]]:
         """
@@ -388,8 +428,22 @@ class RL100Policy(DP3):
         trajectory_list = []
         log_probs_list = []
 
-        # Start from pure noise
-        x_t = torch.randn_like(condition_data)
+        # Start from pure noise. OPE can optionally pass a seeded generator so
+        # candidate/behavior policies are compared under identical stochastic
+        # DDIM noise realizations.
+        if initial_noise is not None:
+            x_t = initial_noise.to(
+                device=condition_data.device,
+                dtype=condition_data.dtype,
+            ).clone()
+        elif generator is None:
+            x_t = torch.randn_like(condition_data)
+        else:
+            x_t = torch.randn(
+                condition_data.shape,
+                generator=generator,
+                dtype=condition_data.dtype,
+            ).to(condition_data.device)
         trajectory_list.append(x_t.clone())
 
         # Set timesteps
@@ -414,7 +468,9 @@ class RL100Policy(DP3):
                 t=t,
                 t_prev=t_prev,
                 global_cond=global_cond,
-                return_mean=False
+                executed_action_steps=executed_action_steps,
+                return_mean=False,
+                generator=generator,
             )
 
             # Store
@@ -432,6 +488,73 @@ class RL100Policy(DP3):
         else:
             return x_t
 
+    def compute_trajectory_log_probs(
+        self,
+        trajectory: List[torch.Tensor],
+        obs_dict: Optional[Dict[str, torch.Tensor]] = None,
+        global_cond: Optional[torch.Tensor] = None,
+        executed_action_steps: Optional[torch.Tensor] = None,
+    ) -> List[torch.Tensor]:
+        device = next(self.model.parameters()).device
+        batch_size = trajectory[0].shape[0]
+        if global_cond is None:
+            if obs_dict is None:
+                raise ValueError("compute_trajectory_log_probs requires obs_dict when global_cond is not provided.")
+            global_cond = self.encode_obs_global_cond(obs_dict)
+
+        scheduler = self.noise_scheduler
+        scheduler.set_timesteps(self.num_inference_steps)
+        timesteps = scheduler.timesteps
+        alphas_cumprod = scheduler.alphas_cumprod.to(device)
+        log_prob_mask = self.get_action_chunk_mask(
+            trajectory[0],
+            executed_action_steps=executed_action_steps,
+            dtype=trajectory[0].dtype,
+        )
+        log_probs = []
+
+        for i, t in enumerate(timesteps):
+            x_t = trajectory[i]
+            x_t_prev = trajectory[i + 1]
+            if i + 1 < len(timesteps):
+                t_prev = timesteps[i + 1]
+                t_prev_value = int(t_prev.item()) if torch.is_tensor(t_prev) else int(t_prev)
+            else:
+                t_prev_value = -1
+
+            if t_prev_value < 0:
+                log_probs.append(torch.zeros(batch_size, device=device, dtype=x_t.dtype))
+                continue
+
+            t_value = int(t.item()) if torch.is_tensor(t) else int(t)
+            t_tensor = torch.full((batch_size,), t_value, device=device, dtype=torch.long)
+            t_prev_tensor = torch.full((batch_size,), t_prev_value, device=device, dtype=torch.long)
+
+            noise_pred = self.model(
+                sample=x_t,
+                timestep=t_tensor,
+                global_cond=global_cond
+            )
+
+            alpha_t = alphas_cumprod[t_tensor].view(-1, 1, 1)
+            alpha_t_prev = alphas_cumprod[t_prev_tensor].view(-1, 1, 1)
+            pred_x0 = (x_t - torch.sqrt(1 - alpha_t) * noise_pred) / torch.sqrt(alpha_t)
+            variance = self.get_variance_at_timestep(t_tensor, t_prev_tensor)
+            noise_coeff = torch.sqrt(
+                torch.clamp(1 - alpha_t_prev - variance.view(-1, 1, 1), min=0.0)
+            )
+            mean = torch.sqrt(alpha_t_prev) * pred_x0 + noise_coeff * noise_pred
+
+            log_prob = self.compute_gaussian_log_prob(
+                self._extract_log_prob_region(x_t_prev),
+                self._extract_log_prob_region(mean),
+                variance,
+                mask=log_prob_mask,
+            )
+            log_probs.append(log_prob)
+
+        return log_probs
+
     def compute_ppo_loss(
         self,
         obs_dict: Optional[Dict[str, torch.Tensor]],
@@ -439,6 +562,7 @@ class RL100Policy(DP3):
         advantages: torch.Tensor,
         trajectory: List[torch.Tensor],
         global_cond: Optional[torch.Tensor] = None,
+        executed_action_steps: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Dict]:
         """
         Compute RL-100's K-step PPO loss.
@@ -465,58 +589,11 @@ class RL100Policy(DP3):
                 raise ValueError("compute_ppo_loss requires obs_dict when global_cond is not provided.")
             global_cond = self.encode_obs_global_cond(obs_dict)
 
-        # Compute new log probs for each stochastic denoising step. The final
-        # deterministic step is excluded from the PPO likelihood ratio.
-        new_log_probs = []
-        scheduler = self.noise_scheduler
-        scheduler.set_timesteps(self.num_inference_steps)
-        timesteps = scheduler.timesteps  # e.g. [90, 80, 70, ..., 0]
-        alphas_cumprod = scheduler.alphas_cumprod.to(device)
-
-        for i, t in enumerate(timesteps):
-            x_t = trajectory[i]
-            x_t_prev = trajectory[i + 1]
-
-            # Compute the ACTUAL previous timestep from the schedule
-            if i + 1 < len(timesteps):
-                t_prev = timesteps[i + 1]
-            else:
-                t_prev = torch.tensor(-1, device=device)
-
-            t_tensor = torch.tensor([t], device=device).expand(batch_size)
-            t_prev_tensor = torch.tensor([t_prev], device=device).expand(batch_size)
-
-            if torch.all(t_prev_tensor < 0):
-                continue
-
-            # Predict noise
-            noise_pred = self.model(
-                sample=x_t,
-                timestep=t,
-                global_cond=global_cond
-            )
-
-            alpha_t = alphas_cumprod[t_tensor].view(-1, 1, 1)
-            alpha_t_prev = torch.where(
-                (t_prev_tensor >= 0).view(-1, 1, 1),
-                alphas_cumprod[t_prev_tensor.clamp(min=0)].view(-1, 1, 1),
-                torch.ones_like(alpha_t)
-            )
-
-            pred_x0 = (x_t - torch.sqrt(1 - alpha_t) * noise_pred) / torch.sqrt(alpha_t)
-
-            # Variance σ² (clipped, paper Eq.23)
-            variance = self.get_variance_at_timestep(t_tensor, t_prev_tensor)
-
-            # Mean: paper Eq.5a  μ = √ᾱ_{t_prev}·x̂₀ + √(1 - ᾱ_{t_prev} - σ²)·εθ
-            noise_coeff = torch.sqrt(
-                torch.clamp(1 - alpha_t_prev - variance.view(-1, 1, 1), min=0.0)
-            )
-            mean = torch.sqrt(alpha_t_prev) * pred_x0 + noise_coeff * noise_pred
-
-            # Log prob of actual transition
-            log_prob = self.compute_gaussian_log_prob(x_t_prev, mean, variance)
-            new_log_probs.append((i, log_prob))
+        new_log_probs = self.compute_trajectory_log_probs(
+            trajectory=trajectory,
+            global_cond=global_cond,
+            executed_action_steps=executed_action_steps,
+        )
 
         # Compute PPO loss for each step
         ppo_losses = []
@@ -525,7 +602,7 @@ class RL100Policy(DP3):
         clip_fracs = []
         mean_abs_ratio_devs = []
 
-        for k, log_prob_new in new_log_probs:
+        for k, log_prob_new in enumerate(new_log_probs[:-1]):
             # Probability ratio
             log_ratio = log_prob_new - old_log_probs[k]
             ratio = torch.exp(log_ratio)
@@ -553,6 +630,21 @@ class RL100Policy(DP3):
 
             ppo_losses.append(ppo_loss_k)
 
+        if not ppo_losses:
+            total_ppo_loss = torch.zeros((), device=device, dtype=advantages.dtype)
+            info = {
+                'ppo_loss': 0.0,
+                'mean_ratio': 1.0,
+                'min_ratio': 1.0,
+                'max_ratio': 1.0,
+                'approx_kl': 0.0,
+                'clip_frac': 0.0,
+                'mean_abs_ratio_dev': 0.0,
+                'mean_advantage': advantages.mean().item(),
+                'std_advantage': advantages.std().item(),
+            }
+            return total_ppo_loss, info
+
         # Average over K steps (not sum) — prevents gradient magnitude scaling with K
         total_ppo_loss = sum(ppo_losses) / len(ppo_losses)
 
@@ -574,6 +666,9 @@ class RL100Policy(DP3):
         self,
         obs_dict: Optional[Dict[str, torch.Tensor]] = None,
         global_cond: Optional[torch.Tensor] = None,
+        initial_noise: Optional[torch.Tensor] = None,
+        generator: Optional[torch.Generator] = None,
+        executed_action_steps: Optional[torch.Tensor] = None,
     ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
         """
         Sample denoising trajectory for PPO training.
@@ -604,7 +699,10 @@ class RL100Policy(DP3):
                 condition_data=cond_data,
                 condition_mask=cond_mask,
                 global_cond=global_cond,
-                return_trajectory=True
+                return_trajectory=True,
+                initial_noise=initial_noise,
+                generator=generator,
+                executed_action_steps=executed_action_steps,
             )
 
         return trajectory, log_probs_old
@@ -612,6 +710,9 @@ class RL100Policy(DP3):
     def sample_for_ppo_from_global_cond(
         self,
         global_cond: torch.Tensor,
+        initial_noise: Optional[torch.Tensor] = None,
+        generator: Optional[torch.Generator] = None,
+        executed_action_steps: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor]]:
         device = global_cond.device
         batch_size = global_cond.shape[0]
@@ -623,7 +724,10 @@ class RL100Policy(DP3):
                 condition_data=cond_data,
                 condition_mask=cond_mask,
                 global_cond=global_cond,
-                return_trajectory=True
+                return_trajectory=True,
+                initial_noise=initial_noise,
+                generator=generator,
+                executed_action_steps=executed_action_steps,
             )
 
         return nsample, trajectory, log_probs_old
@@ -631,22 +735,16 @@ class RL100Policy(DP3):
     def predict_action_with_trajectory(
         self,
         obs_dict: Dict[str, torch.Tensor],
+        initial_noise: Optional[torch.Tensor] = None,
+        generator: Optional[torch.Generator] = None,
     ) -> Dict[str, torch.Tensor]:
-        device = next(self.model.parameters()).device
-        batch_size = next(iter(obs_dict.values())).shape[0]
+        global_cond = self.encode_obs_global_cond(obs_dict)
 
-        nobs = self.normalizer.normalize(obs_dict)
-        if not self.use_pc_color:
-            nobs['point_cloud'] = nobs['point_cloud'][..., :3]
-
-        this_nobs = dict_apply(
-            nobs,
-            lambda x: x[:, :self.n_obs_steps, ...].reshape(-1, *x.shape[2:])
+        nsample, trajectory, log_probs_old = self.sample_for_ppo_from_global_cond(
+            global_cond,
+            initial_noise=initial_noise,
+            generator=generator,
         )
-        nobs_features = self.obs_encoder(this_nobs)
-        global_cond = nobs_features.reshape(batch_size, -1)
-
-        nsample, trajectory, log_probs_old = self.sample_for_ppo_from_global_cond(global_cond)
         naction_pred = nsample[..., :self.action_dim]
         action_pred = self.normalizer['action'].unnormalize(naction_pred)
         action = self.extract_action_chunk(action_pred)

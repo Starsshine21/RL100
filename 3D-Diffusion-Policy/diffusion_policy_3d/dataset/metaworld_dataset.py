@@ -201,6 +201,17 @@ class MetaworldDataset(BaseDataset):
         next_pc[sample_start_idx:sample_end_idx] = pc_sample
 
         return next_state, next_pc
+
+    def build_obs_window_dict(self, decision_start_idx: int, episode_start: int, episode_end: int):
+        next_state, next_pc = self._build_obs_window(
+            decision_start_idx=decision_start_idx,
+            episode_start=episode_start,
+            episode_end=episode_end,
+        )
+        return {
+            'agent_pos': next_state,
+            'point_cloud': next_pc,
+        }
     
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         sample = self.sampler.sample_sequence(idx)
@@ -224,10 +235,12 @@ class MetaworldDataset(BaseDataset):
             # sampled sequence; otherwise the terminal reward is duplicated near the
             # episode tail.
             chunk_buffer_end = min(decision_start_idx + nc, episode_end)
+            executed_action_steps = max(int(chunk_buffer_end - decision_start_idx), 1)
             raw_rewards = self.replay_buffer['reward'][decision_start_idx:chunk_buffer_end].astype(np.float32)
             discount = np.array([self.gamma ** j for j in range(len(raw_rewards))], dtype=np.float32)
             chunk_reward = float(np.dot(discount, raw_rewards))
             data['reward'] = np.array(chunk_reward, dtype=np.float32)
+            data['executed_action_steps'] = np.array(executed_action_steps, dtype=np.int64)
 
             raw_dones = self.replay_buffer['done'][decision_start_idx:chunk_buffer_end].astype(np.float32)
             data['done'] = np.array(raw_dones.any() if len(raw_dones) > 0 else 0.0, dtype=np.float32)

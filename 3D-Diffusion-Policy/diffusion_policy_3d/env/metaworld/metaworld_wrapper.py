@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import metaworld
-import random
 import time
 
 from natsort import natsorted
@@ -22,15 +21,21 @@ class MetaWorldEnv(gym.Env):
 
     def __init__(self, task_name, device="cuda:0", 
                  use_point_crop=True,
-                 num_points=1024,
+                 num_points=None,
+                 use_pc_color=False,
+                 point_sampling_method='fps',
+                 seed=None,
                  ):
         super(MetaWorldEnv, self).__init__()
+        if num_points is None:
+            raise ValueError("MetaWorldEnv requires num_points to be provided by config.")
 
         if '-v2' not in task_name:
             task_name = task_name + '-v2-goal-observable'
 
         self.env = metaworld.envs.ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[task_name]()
         self.env._freeze_rand_vec = False
+        self.env.seeded_rand_vec = True
 
         # https://arxiv.org/abs/2212.05698
         # self.env.sim.model.cam_pos[2] = [0.75, 0.075, 0.7]
@@ -47,8 +52,13 @@ class MetaWorldEnv(gym.Env):
         self.pc_generator = PointCloudGenerator(sim=self.env.sim, cam_names=['corner2'], img_size=self.image_size)
         self.use_point_crop = use_point_crop
         cprint("[MetaWorldEnv] use_point_crop: {}".format(self.use_point_crop), "cyan")
-        self.num_points = num_points # 512
-        
+        self.use_pc_color = bool(use_pc_color)
+        self.point_sampling_method = str(point_sampling_method)
+        self.num_points = int(num_points)
+        cprint("[MetaWorldEnv] use_pc_color: {}".format(self.use_pc_color), "cyan")
+        cprint("[MetaWorldEnv] point_sampling_method: {}".format(self.point_sampling_method), "cyan")
+        cprint("[MetaWorldEnv] num_points: {}".format(self.num_points), "cyan")
+
         x_angle = 61.4
         y_angle = -7
         self.pc_transform = np.array([
@@ -99,7 +109,7 @@ class MetaWorldEnv(gym.Env):
             'point_cloud': spaces.Box(
                 low=-np.inf,
                 high=np.inf,
-                shape=(self.num_points, 3),
+                shape=(self.num_points, 6 if self.use_pc_color else 3),
                 dtype=np.float32
             ),
             'full_state': spaces.Box(
@@ -109,6 +119,11 @@ class MetaWorldEnv(gym.Env):
                 dtype=np.float32
             ),
         })
+
+        self._seed = None
+        self._pointcloud_rng = np.random.default_rng()
+        if seed is not None:
+            self.set_seed(seed)
 
     def get_robot_state(self):
         eef_pos = self.env.get_endeff_pos()
@@ -128,11 +143,10 @@ class MetaWorldEnv(gym.Env):
         return img
     
 
-    def get_point_cloud(self, use_rgb=True):
-        point_cloud, depth = self.pc_generator.generateCroppedPointCloud(device_id=self.device_id) # raw point cloud, Nx3
-        
-        
-        if not use_rgb:
+    def get_point_cloud(self):
+        point_cloud, depth = self.pc_generator.generateCroppedPointCloud(device_id=self.device_id)
+
+        if not self.use_pc_color:
             point_cloud = point_cloud[..., :3]
         
         
@@ -152,7 +166,12 @@ class MetaWorldEnv(gym.Env):
                 mask = np.all(point_cloud[:, :3] < self.max_bound, axis=1)
                 point_cloud = point_cloud[mask]
 
-        point_cloud = point_cloud_sampling(point_cloud, self.num_points, 'fps')
+        point_cloud = point_cloud_sampling(
+            point_cloud,
+            self.num_points,
+            self.point_sampling_method,
+            rng=self._pointcloud_rng,
+        )
         
         depth = depth[::-1]
         
@@ -202,8 +221,6 @@ class MetaWorldEnv(gym.Env):
         return obs_dict, reward, done, env_info
 
     def reset(self):
-        self.env.reset()
-        self.env.reset_model()
         raw_obs = self.env.reset()
         self.cur_step = 0
 
@@ -226,10 +243,33 @@ class MetaWorldEnv(gym.Env):
         return obs_dict
 
     def seed(self, seed=None):
-        pass
+        if seed is None:
+            return self._seed
+
+        seed = int(seed)
+        self._seed = seed
+        self._pointcloud_rng = np.random.default_rng(seed)
+
+        try:
+            self.env.seeded_rand_vec = True
+            self.env.seed(seed)
+        except Exception:
+            pass
+
+        try:
+            self.action_space.seed(seed)
+        except Exception:
+            pass
+
+        try:
+            self.observation_space.seed(seed)
+        except Exception:
+            pass
+
+        return seed
 
     def set_seed(self, seed=None):
-        pass
+        return self.seed(seed)
 
     def render(self, mode='rgb_array'):
         img = self.get_rgb()
@@ -237,4 +277,3 @@ class MetaWorldEnv(gym.Env):
 
     def close(self):
         pass
-
